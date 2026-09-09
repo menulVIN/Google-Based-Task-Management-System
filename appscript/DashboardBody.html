@@ -1,23 +1,38 @@
-<div class="loading-overlay" id="loading">
+<div class="overlay" id="overlay">
   <div class="spinner"></div>
-  <div class="loading-text" id="loading-text">Loading tasks…</div>
+  <div class="overlay-text" id="overlay-text">Loading tasks…</div>
 </div>
 <div class="toast" id="toast"></div>
 
-<div class="stats-bar">
-  <div class="stat" id="stat-all"        onclick="filterByStatus('all')">
-    <div class="stat-num" id="count-all">—</div><div class="stat-label">Open</div></div>
-  <div class="stat" id="stat-inprogress" onclick="filterByStatus('In Progress')">
-    <div class="stat-num green" id="count-inprogress">—</div><div class="stat-label">Active</div></div>
-  <div class="stat" id="stat-paused"     onclick="filterByStatus('Paused')">
-    <div class="stat-num orange" id="count-paused">—</div><div class="stat-label">Paused</div></div>
-  <div class="stat" id="stat-overdue"    onclick="filterByStatus('overdue')">
-    <div class="stat-num red" id="count-overdue">—</div><div class="stat-label">Overdue</div></div>
+<div class="appbar">
+  <img class="mark" id="brand-mark" alt="OneSapro" hidden>
+  <div class="appbar-title">
+    <h1>My Tasks</h1>
+    <div class="sub" id="who">&nbsp;</div>
+  </div>
+  <button class="btn btn-quiet" id="btn-bulk" type="button">Bulk add</button>
+  <button class="btn btn-quiet" type="button" onclick="loadTasks()">Refresh</button>
+  <a class="btn btn-primary" id="btn-new" href="?page=submit" style="text-decoration:none">New task</a>
+</div>
+
+<div class="stats">
+  <button class="stat s-open"    type="button" onclick="filterByStatus('all')"         id="stat-all">
+    <span class="stat-n" id="count-all">—</span><span class="stat-l">Open</span></button>
+  <button class="stat s-active"  type="button" onclick="filterByStatus('In Progress')" id="stat-inprogress">
+    <span class="stat-n" id="count-inprogress">—</span><span class="stat-l">Active</span></button>
+  <button class="stat s-paused"  type="button" onclick="filterByStatus('Paused')"      id="stat-paused">
+    <span class="stat-n" id="count-paused">—</span><span class="stat-l">Paused</span></button>
+  <button class="stat s-overdue" type="button" onclick="filterByStatus('overdue')"     id="stat-overdue">
+    <span class="stat-n" id="count-overdue">—</span><span class="stat-l">Overdue</span></button>
 </div>
 
 <div class="filters">
-  <input type="text" id="search" placeholder="Search task, client or ID…" oninput="applyFilters()">
-  <div class="filter-row">
+  <div class="field grow">
+    <label for="search">Search</label>
+    <input id="search" placeholder="Task, client or ID" oninput="applyFilters()">
+  </div>
+  <div class="field fixed">
+    <label for="filter-status">Status</label>
     <select id="filter-status" onchange="applyFilters()">
       <option value="all">All statuses</option>
       <option value="New">New</option>
@@ -27,94 +42,156 @@
       <option value="Done">Done</option>
       <option value="overdue">Overdue</option>
     </select>
-    <select id="filter-developer" onchange="applyFilters()" style="display:none">
-      <option value="all">Everyone</option>
-    </select>
   </div>
-  <div class="filter-foot">
-    <label class="tick">
-      <input type="checkbox" id="include-finished" onchange="loadTasks()">
-      <span>Include old finished</span>
-    </label>
-    <a id="open-full" class="open-full" href="#" target="_blank" rel="noopener" hidden>Open full page &#8599;</a>
+  <div class="field fixed" id="dev-field" hidden>
+    <label for="filter-developer">Assignee</label>
+    <select id="filter-developer" onchange="applyFilters()"><option value="all">Everyone</option></select>
   </div>
+  <label class="tick" for="include-finished">
+    <input type="checkbox" id="include-finished" onchange="loadTasks()">
+    <span>Include old finished</span>
+  </label>
+  <a class="open-full" id="open-full" href="#" target="_blank" rel="noopener" hidden>Open full page</a>
 </div>
 
-<div class="bulk-bar" id="bulk-bar">
-  <span id="bulk-count">0 selected</span>
+<div class="bulkbar" id="bulkbar">
+  <span class="count" id="bulk-count">0 selected</span>
   <div class="bulk-actions">
-    <button class="bulk-btn start"  onclick="bulkAction('In Progress')">Start</button>
-    <button class="bulk-btn pause"  onclick="bulkAction('Paused')">Pause</button>
-    <button class="bulk-btn done"   onclick="bulkAction('Done')">Done</button>
-    <button class="bulk-btn cancel" onclick="clearSelection()">✕</button>
+    <button class="bulk-btn" type="button" onclick="bulkAction('In Progress')">Start</button>
+    <button class="bulk-btn" type="button" onclick="bulkAction('Paused')">Pause</button>
+    <button class="bulk-btn" type="button" id="bulk-reassign" disabled
+            title="Reassign needs a backend change — not wired yet">Reassign</button>
+    <button class="bulk-btn go" type="button" onclick="bulkAction('Done')">Mark Done</button>
+    <button class="bulk-btn clear" type="button" onclick="clearSelection()">Clear</button>
   </div>
 </div>
 
+<div id="focus-slot"></div>
+<div id="running-slot"></div>
 <div id="notice-slot"></div>
-<div class="task-list" id="task-list"><div class="no-tasks">Loading…</div></div>
+<div class="skeleton" id="skeleton" hidden></div>
+<div class="grid" id="grid"></div>
+
+<div class="scrim" id="scrim">
+  <div class="dialog" role="dialog" aria-modal="true" aria-labelledby="dlg-title">
+    <h2 id="dlg-title">Discard changes?</h2>
+    <p id="dlg-body"></p>
+    <div class="dialog-actions">
+      <button class="btn btn-quiet" type="button" id="dlg-cancel">Keep editing</button>
+      <button class="btn-danger" type="button" id="dlg-confirm">Discard changes</button>
+    </div>
+  </div>
+</div>
+<div class="pager" id="pager" hidden>
+  <div class="pager-label" id="pager-label"></div>
+  <div class="pager-controls" id="pager-controls"></div>
+</div>
 
 <script>
-var allTasks = [];
-var isManager = false;
-var selectedIds = {};
-var liveTimer = null;
+var allTasks = [], isManager = false, selected = {}, liveTimer = null;
+var omittedOld = 0, page = 1, perPage = 10, filtered = [];
+var focusId = null, focusThread = null, draftDirty = false;
 
 function el(id) { return document.getElementById(id); }
-
-// ---------------------------------------------------------------------------
-// LOAD
-// ---------------------------------------------------------------------------
-function loadTasks() {
-  showLoading('Loading tasks…');
-  // Server-side window: open work always, finished work only if asked for.
-  // Without it a manager pulls every row Master has ever held.
-  var opts = { includeFinished: el('include-finished').checked };
-  google.script.run
-    .withSuccessHandler(onTasksLoaded)
-    .withFailureHandler(function (err) { hideLoading(); showToast('Error: ' + err.message, 'error'); })
-    .getSidebarTasks(opts);
+function node(tag, cls, text) {
+  var n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (text != null) n.textContent = text;   // textContent everywhere — a summary
+  return n;                                  // containing " or < must not break the card
 }
 
-function onTasksLoaded(result) {
-  allTasks = result.tasks || [];
-  isManager = !!result.isManager;
+/* FE standard: DD/MM/YYYY throughout. */
+function pad2(n) { return String(n).padStart(2, '0'); }
+function ddmmyyyy(d) { return pad2(d.getDate()) + '/' + pad2(d.getMonth() + 1) + '/' + d.getFullYear(); }
 
-  var link = el('open-full');
-  if (result.webAppUrl) {
-    link.href = result.webAppUrl + '?page=mytasks';
-    link.hidden = false;
+/* Apps Script does not reliably preserve null across google.script.run — a null
+   can arrive as undefined, so test for a real number rather than === null. */
+function isNum(v) { return typeof v === 'number' && isFinite(v); }
+
+function dur(h) {
+  if (h < 1)  return Math.max(1, Math.round(h * 60)) + 'm';
+  if (h < 24) return Math.floor(h) + 'h';
+  var d = Math.floor(h / 24), r = Math.floor(h % 24);
+  return r ? d + 'd ' + r + 'h' : d + 'd';
+}
+function hhmm(h) {
+  if (!h || h <= 0) return '—';
+  return Math.floor(h) + 'h ' + Math.round((h % 1) * 60) + 'm';
+}
+
+// ---------------------------------------------------------------------- load
+var firstLoad = true;
+
+/* 1e loading state: a skeleton on the very first paint, a quiet overlay after,
+   so a refresh does not blank the board you are already reading. */
+function showSkeleton() {
+  var s = el('skeleton');
+  s.innerHTML = '';
+  for (var i = 0; i < 6; i++) {
+    var c = node('div', 'sk-card');
+    c.appendChild(node('div', 'sk-line')).style.width = '34%';
+    c.appendChild(node('div', 'sk-line')).style.width = '86%';
+    c.appendChild(node('div', 'sk-line')).style.width = '62%';
+    s.appendChild(c);
+  }
+  s.hidden = false;
+  el('grid').hidden = true;
+}
+function hideSkeleton() { el('skeleton').hidden = true; el('grid').hidden = false; }
+
+function loadTasks() {
+  if (firstLoad) showSkeleton(); else showOverlay('Refreshing…');
+  google.script.run
+    .withSuccessHandler(onLoaded)
+    .withFailureHandler(function (e) {
+      hideOverlay(); hideSkeleton(); firstLoad = false;
+      toast('Could not load tasks: ' + e.message, 'bad');
+    })
+    .getSidebarTasks({ includeFinished: el('include-finished').checked });
+}
+
+function onLoaded(res) {
+  allTasks   = res.tasks || [];
+  isManager  = !!res.isManager;
+  omittedOld = res.omittedOld || 0;
+
+  if (window.BRAND && window.BRAND['onesapro-icon']) {
+    var m = el('brand-mark');
+    m.src = window.BRAND['onesapro-icon'];   // inlined; a relative path is dead under Apps Script
+    m.hidden = false;
   }
 
-  var slot = el('notice-slot');
-  slot.innerHTML = '';
-  if (result.notice) {
-    var n = document.createElement('div');
-    n.className = 'notice';
-    n.textContent = result.notice;
-    slot.appendChild(n);
-  }
-  if (result.omittedOld) {
-    var o = document.createElement('div');
-    o.className = 'notice muted';
-    o.textContent = result.omittedOld + ' finished or older task(s) hidden. ' +
-                    'Tick "Include old finished" to load them.';
-    slot.appendChild(o);
-  }
+  el('who').textContent = (res.devName || res.email || '') +
+    (isManager ? ' · manager view' : '') + ' · ' + ddmmyyyy(new Date());
 
-  var devFilter = el('filter-developer');
-  if (isManager && devFilter.options.length <= 1) {
-    devFilter.style.display = '';
-    (result.devNames || []).forEach(function (name) {
-      var o = document.createElement('option');
-      o.value = name; o.textContent = name;
-      devFilter.appendChild(o);
-    });
+  if (res.webAppUrl) {
+    el('open-full').href = res.webAppUrl + '?page=mytasks';
+    el('open-full').hidden = false;
+    el('btn-new').href = res.webAppUrl + '?page=submit';
+  }
+  el('btn-bulk').hidden = !isManager;
+  el('btn-bulk').onclick = function () {
+    toast('Bulk add lives in the sheet: Tracker Options → Bulk Add Tasks', 'ok');
+  };
+
+  if (isManager) {
+    var f = el('filter-developer');
+    if (f.options.length <= 1) {
+      (res.devNames || []).forEach(function (n) {
+        var o = document.createElement('option'); o.value = n; o.textContent = n; f.appendChild(o);
+      });
+    }
+    el('dev-field').hidden = false;
   }
 
   updateStats();
+  page = 1;
   applyFilters();
-  hideLoading();
-  startLiveTicker();
+  hideOverlay();
+  hideSkeleton();
+  firstLoad = false;
+  startTicker();
+  if (focusId) renderFocus();     // keep the focus panel open across a refresh
 }
 
 function updateStats() {
@@ -125,15 +202,13 @@ function updateStats() {
   el('count-overdue').textContent    = n(function (t) { return t.isOverdue; });
 }
 
-// ---------------------------------------------------------------------------
-// FILTER
-// ---------------------------------------------------------------------------
+// -------------------------------------------------------------------- filter
 function applyFilters() {
   var q      = el('search').value.toLowerCase();
   var status = el('filter-status').value;
   var dev    = el('filter-developer').value;
 
-  var list = allTasks.filter(function (t) {
+  filtered = allTasks.filter(function (t) {
     if (q && t.summary.toLowerCase().indexOf(q) === -1 &&
              t.client.toLowerCase().indexOf(q)  === -1 &&
              t.taskId.toLowerCase().indexOf(q)  === -1) return false;
@@ -143,229 +218,467 @@ function applyFilters() {
     return true;
   });
 
-  renderTasks(list);
+  if ((page - 1) * perPage >= filtered.length) page = 1;
+  renderRunning();
+  renderNotice();
+  renderGrid();
+  renderPager();
 }
 
-function filterByStatus(status) {
-  el('filter-status').value = status;
-  ['all', 'inprogress', 'paused', 'overdue'].forEach(function (s) {
-    el('stat-' + s).classList.remove('active');
+function filterByStatus(s) {
+  el('filter-status').value = s;
+  ['all', 'inprogress', 'paused', 'overdue'].forEach(function (k) {
+    el('stat-' + k).classList.remove('active');
   });
-  var map = { 'all': 'all', 'In Progress': 'inprogress', 'Paused': 'paused', 'overdue': 'overdue' };
-  if (map[status]) el('stat-' + map[status]).classList.add('active');
+  var map = { all: 'all', 'In Progress': 'inprogress', Paused: 'paused', overdue: 'overdue' };
+  if (map[s]) el('stat-' + map[s]).classList.add('active');
+  page = 1;
   applyFilters();
 }
 
-// ---------------------------------------------------------------------------
-// RENDER — DOM nodes, not innerHTML. A summary containing a quote or an angle
-// bracket used to break the card layout outright.
-// ---------------------------------------------------------------------------
-function span(cls, text) {
-  var s = document.createElement('span');
-  if (cls) s.className = cls;
-  if (text != null) s.textContent = text;
-  return s;
+// ------------------------------------------------------------ running banner
+function renderRunning() {
+  var slot = el('running-slot');
+  slot.innerHTML = '';
+  var run = allTasks.filter(function (t) { return t.isLive; })[0];
+  if (!run) return;
+
+  var wrap = node('div', 'running-wrap');
+  var box  = node('div', 'running');
+  var row  = node('div', 'running-row');
+
+  var main = node('div', 'running-main');
+  var eye  = node('div', 'running-eyebrow');
+  eye.appendChild(node('span', 'pulse'));
+  eye.appendChild(document.createTextNode('Now running'));
+  main.appendChild(eye);
+  main.appendChild(node('div', 'running-title', run.summary));
+  main.appendChild(node('div', 'running-meta',
+    run.taskId + ' · ' + run.client + (run.module ? ' · ' + run.module : '') +
+    ' · ' + run.assignedMember + (run.deadlineStr ? ' · due ' + run.deadlineStr : '')));
+
+  var clock = node('div', 'running-clock');
+  var t = node('div', 't', hhmm(run.timeSpentHrs));
+  t.dataset.base = run.timeSpentHrs;
+  t.dataset.live = '1';
+  clock.appendChild(t);
+  clock.appendChild(node('div', 's', 'running now'));
+
+  var acts = node('div', 'running-actions');
+  var open = node('button', 'btn-pill-quiet', 'Open');
+  open.onclick = function () { openFocus(run.taskId); };
+  var pause = node('button', 'btn-pill-quiet', 'Pause');
+  pause.onclick = function () { setStatus(run.taskId, 'Paused', pause); };
+  var done = node('button', 'btn-pill-primary', 'Mark Done');
+  done.onclick = function () { setStatus(run.taskId, 'Done', done); };
+  acts.appendChild(open); acts.appendChild(pause); acts.appendChild(done);
+
+  row.appendChild(main); row.appendChild(clock); row.appendChild(acts);
+  box.appendChild(row);
+
+  if (run.needsCheckIn) box.appendChild(checkInBox(run, 'checkin'));
+
+  wrap.appendChild(box);
+  slot.appendChild(wrap);
 }
 
-function fmtHours(h) {
-  if (!h || h <= 0) return '—';
-  return Math.floor(h) + 'h ' + Math.round((h % 1) * 60) + 'm';
-}
-
-/**
- * Apps Script does not reliably preserve null across google.script.run — a null
- * can arrive as undefined. Checking `=== null` therefore misses, and the old
- * code divided undefined and rendered "NaNd left". Test for a real number.
- */
-function isNum(v) { return typeof v === 'number' && isFinite(v); }
-
-function deadlineChip(t) {
-  if (!t.deadlineStr) return null;
-
-  // Under an hour, report minutes. Flooring to whole hours showed "0h over"
-  // on a task forty minutes late, which reads as a bug.
-  function span_(h) {
-    if (h < 1)  return Math.max(1, Math.round(h * 60)) + 'm';
-    if (h < 24) return Math.floor(h) + 'h';
-    var d = Math.floor(h / 24), rem = Math.floor(h % 24);
-    return rem ? d + 'd ' + rem + 'h' : d + 'd';
-  }
-
-  if (t.isOverdue && isNum(t.hoursOvertime)) {
-    return span('chip overdue', span_(t.hoursOvertime) + ' over');
-  }
-  if (!isNum(t.hoursRemaining)) return null;
-
-  var r = t.hoursRemaining;
-  return span('chip ' + (r < 4 ? 'urgent' : 'ok'), span_(r) + ' left');
-}
-
-function actionButton(label, cls, taskId, status, disabled) {
-  var b = document.createElement('button');
-  b.className = 'action-btn ' + cls;
-  b.textContent = label;
-  b.disabled = disabled;
-  b.onclick = function () { updateStatus(taskId, status, b); };
+/* The nudge only appears because the Comments tab gives a real idle signal —
+   the newest of the last note or the moment the timer started. */
+function checkInBox(t, cls) {
+  var b = node('div', cls);
+  b.appendChild(node('p', null,
+    'Nothing logged here for ' + dur(t.idleHours) + '. A note keeps this off the follow-up list.'));
+  var addNote = node('button', null, 'Add a note');
+  addNote.onclick = function () { openFocus(t.taskId, true); };
+  var keep = node('button', null, 'Yes, keep running');
+  keep.onclick = function () {
+    postComment(t.taskId, 'Still working on this.', false, function () {
+      toast('Noted — timer keeps running', 'ok');
+    });
+  };
+  b.appendChild(addNote); b.appendChild(keep);
   return b;
 }
 
-var RENDER_CAP = 150;
+// ------------------------------------------------------ 1d — focus + thread
+function openFocus(taskId, focusComposer) {
+  focusId = taskId;
+  focusThread = null;
+  draftDirty = false;
+  renderFocus(focusComposer);
+  google.script.run
+    .withSuccessHandler(function (r) { focusThread = r.comments || []; renderFocus(focusComposer); })
+    .withFailureHandler(function (e) { focusThread = []; renderFocus(); toast(e.message, 'bad'); })
+    .getTaskThread(taskId);
+}
 
-function renderTasks(tasks) {
-  var list = el('task-list');
-  list.innerHTML = '';
+function closeFocus() {
+  if (draftDirty) {
+    confirmDialog({
+      title: 'Discard changes?',
+      body: 'You have an unsent update on ' + focusId + '. Closing loses it.',
+      cancel: 'Keep editing',
+      confirm: 'Discard changes',
+      onConfirm: function () { draftDirty = false; focusId = null; renderFocus(); }
+    });
+    return;
+  }
+  focusId = null;
+  renderFocus();
+}
 
-  if (!tasks.length) {
-    list.appendChild(span('no-tasks', 'No tasks match.'));
+function renderFocus(focusComposer) {
+  var slot = el('focus-slot');
+  slot.innerHTML = '';
+  if (!focusId) return;
+
+  var t = allTasks.filter(function (x) { return x.taskId === focusId; })[0];
+  if (!t) { focusId = null; return; }
+
+  var wrap = node('div', 'focus-wrap');
+  var box  = node('div', 'focus');
+
+  var head = node('div', 'focus-head');
+  var eye  = node('div', 'focus-eyebrow');
+  if (t.isLive) eye.appendChild(node('span', 'pulse'));
+  eye.appendChild(document.createTextNode(t.isLive ? 'Now running' : t.status));
+  head.appendChild(eye);
+  head.appendChild(node('div', 'focus-title', t.summary));
+  head.appendChild(node('div', 'focus-meta',
+    t.taskId + ' · ' + t.client + (t.module ? ' · ' + t.module : '') +
+    ' · ' + t.assignedMember + (t.deadlineStr ? ' · due ' + t.deadlineStr : '')));
+
+  var row = node('div', 'focus-row');
+  var clock = node('div', 'focus-clock');
+  var tv = node('div', 't', hhmm(t.timeSpentHrs));
+  tv.dataset.base = t.timeSpentHrs;
+  tv.dataset.live = t.isLive ? '1' : '0';
+  clock.appendChild(tv);
+  clock.appendChild(node('div', 's', t.isLive ? 'running now' : 'logged in total'));
+
+  var acts = node('div', 'focus-actions');
+  if (t.isLive) {
+    var p = node('button', 'btn-on-green', 'Pause');
+    p.onclick = function () { setStatus(t.taskId, 'Paused', p); };
+    acts.appendChild(p);
+  } else if (t.status !== 'Done') {
+    var s = node('button', 'btn-on-green', 'Start');
+    s.onclick = function () { setStatus(t.taskId, 'In Progress', s); };
+    acts.appendChild(s);
+  }
+  if (t.status !== 'Done') {
+    var d = node('button', 'btn-lime', 'Mark Done');
+    d.onclick = function () { setStatus(t.taskId, 'Done', d); };
+    acts.appendChild(d);
+  }
+  var close = node('button', 'btn-on-green', 'Close');
+  close.onclick = closeFocus;                  // routes through the same isDirty guard
+  acts.appendChild(close);
+
+  row.appendChild(clock); row.appendChild(acts);
+  head.appendChild(row);
+  box.appendChild(head);
+
+  if (t.needsCheckIn) box.appendChild(checkInBox(t, 'checkin-band'));
+
+  var body = node('div', 'focus-body');
+  body.appendChild(node('div', 'section-label', 'Conversation'));
+
+  if (focusThread === null) {
+    body.appendChild(node('div', 'thread-empty', 'Loading the thread…'));
+  } else if (!focusThread.length) {
+    body.appendChild(node('div', 'thread-empty',
+      'No updates yet. The first note here is what the COO sees instead of silence.'));
+  } else {
+    var thread = node('div', 'thread');
+    focusThread.forEach(function (c) {
+      var m = node('div', 'msg');
+      m.appendChild(node('div', 'avatar', c.initials));
+      var main = node('div', 'msg-main');
+      var h = node('div', 'msg-head');
+      h.appendChild(node('span', 'msg-name', c.name));
+      h.appendChild(node('span', 'msg-when', c.when));
+      main.appendChild(h);
+      main.appendChild(node('div', 'msg-body', c.body));
+      m.appendChild(main);
+      thread.appendChild(m);
+    });
+    body.appendChild(thread);
+  }
+
+  var comp = node('div', 'composer');
+  var ta = document.createElement('textarea');
+  ta.rows = 2;
+  ta.id = 'composer-input';
+  ta.setAttribute('aria-label', 'Add an update');
+  ta.placeholder = 'Write an update…';
+  ta.oninput = function () { draftDirty = ta.value.trim().length > 0; post.disabled = !draftDirty; };
+  comp.appendChild(ta);
+
+  var foot = node('div', 'composer-foot');
+  foot.appendChild(node('span', 'composer-note',
+    'Posting also logs ' + 15 + ' minutes against this task'));
+  var post = node('button', 'btn-post', 'Post update');
+  post.disabled = true;
+  post.onclick = function () {
+    var text = ta.value.trim();
+    if (!text) return;
+    post.disabled = true;
+    postComment(t.taskId, text, true, function () { ta.value = ''; draftDirty = false; });
+  };
+  foot.appendChild(post);
+  comp.appendChild(foot);
+  body.appendChild(comp);
+
+  box.appendChild(body);
+  wrap.appendChild(box);
+  slot.appendChild(wrap);
+
+  if (focusComposer) ta.focus();
+}
+
+function postComment(taskId, body, logTime, done) {
+  showOverlay('Posting…');
+  google.script.run
+    .withSuccessHandler(function (r) {
+      hideOverlay();
+      if (!r || !r.success) { toast((r && r.error) || 'Could not post', 'bad'); return; }
+      focusThread = r.thread || focusThread;
+      if (done) done();
+      toast(r.loggedMinutes ? 'Posted · ' + r.loggedMinutes + ' minutes logged' : 'Posted', 'ok');
+      loadTasks();
+    })
+    .withFailureHandler(function (e) { hideOverlay(); toast(e.message, 'bad'); })
+    .addComment(taskId, body, logTime);
+}
+
+// ------------------------------------------------------- 1e — confirm dialog
+function confirmDialog(o) {
+  el('dlg-title').textContent = o.title;
+  el('dlg-body').textContent  = o.body;
+  el('dlg-cancel').textContent  = o.cancel  || 'Cancel';
+  el('dlg-confirm').textContent = o.confirm || 'Confirm';
+  el('scrim').classList.add('visible');
+
+  el('dlg-cancel').onclick  = function () { el('scrim').classList.remove('visible'); };
+  el('dlg-confirm').onclick = function () {
+    el('scrim').classList.remove('visible');
+    if (o.onConfirm) o.onConfirm();
+  };
+  el('dlg-confirm').focus();
+}
+
+function renderNotice() {
+  var slot = el('notice-slot');
+  slot.innerHTML = '';
+  if (!omittedOld) return;
+  slot.appendChild(node('div', 'notice muted',
+    omittedOld.toLocaleString() + ' finished or older task(s) hidden. ' +
+    'Tick “Include old finished” to load them.'));
+}
+
+// ----------------------------------------------------------------- card grid
+function renderGrid() {
+  var grid = el('grid');
+  grid.innerHTML = '';
+
+  // 1e empty state: say what was searched, and offer the way out.
+  if (!filtered.length) {
+    var q = el('search').value.trim();
+    var st = el('filter-status').value;
+    var box = node('div', 'empty');
+    box.appendChild(node('div', 'empty-title', 'No records found.'));
+    box.appendChild(node('div', 'empty-sub',
+      q ? 'Nothing matches “' + q + '”' + (st !== 'all' ? ' with Status = ' + st : '') + '.'
+        : (st !== 'all' ? 'Nothing with Status = ' + st + '.' : 'There is nothing here yet.')));
+    var clear = node('button', null, 'Clear filters');
+    clear.onclick = function () {
+      el('search').value = '';
+      el('filter-status').value = 'all';
+      el('filter-developer').value = 'all';
+      page = 1;
+      applyFilters();
+    };
+    box.appendChild(clear);
+    grid.appendChild(box);
     return;
   }
 
-  // Each card is ~15 nodes. Rendering thousands into a 420px iframe stalls it.
-  var total = tasks.length;
-  var shown = tasks.slice(0, RENDER_CAP);
+  var start = (page - 1) * perPage;
+  filtered.slice(start, start + perPage).forEach(function (t) {
+    var st = t.status.toLowerCase().replace(/\s+/g, '-');
+    var card = node('div', 'card st-' + st + (t.isOverdue ? ' overdue' : ''));
+    if (selected[t.taskId]) card.classList.add('selected');
 
-  shown.forEach(function (t) {
-    var statusClass = t.status.toLowerCase().replace(/\s+/g, '-');
-    var card = document.createElement('div');
-    card.className = 'task-card status-' + statusClass + (t.isOverdue ? ' overdue' : '');
-    card.dataset.taskId = t.taskId;
-    if (selectedIds[t.taskId]) card.classList.add('selected');
-
-    // top
-    var top = document.createElement('div'); top.className = 'card-top';
+    var top = node('div', 'card-top');
     var chk = document.createElement('input');
-    chk.type = 'checkbox'; chk.className = 'card-checkbox';
-    chk.checked = !!selectedIds[t.taskId];
-    chk.onchange = function () { onCheckChange(chk.checked, t.taskId, card); };
-    var main = document.createElement('div'); main.className = 'card-main';
-    main.appendChild(span('card-id', t.taskId + ' · ' + t.date));
-    var sum = span('card-summary', t.summary);
-    sum.title = t.summary;
-    main.appendChild(sum);
-    main.appendChild(span('card-client', t.client + (t.module ? ' · ' + t.module : '')));
+    chk.type = 'checkbox';
+    chk.setAttribute('aria-label', 'Select ' + t.taskId);
+    chk.checked = !!selected[t.taskId];
+    chk.onchange = function () { toggleSelect(chk.checked, t.taskId, card); };
+    var main = node('div', 'card-main');
+    main.appendChild(node('span', 'card-id', t.taskId + ' · ' + t.date));
+    main.appendChild(node('span', 'card-sum', t.summary));
+    main.appendChild(node('span', 'card-where', t.client + (t.module ? ' · ' + t.module : '')));
     top.appendChild(chk); top.appendChild(main);
 
-    // meta
-    var meta = document.createElement('div'); meta.className = 'card-meta';
-    meta.appendChild(span('badge badge-' + statusClass,
-      t.status === 'In Progress' ? 'Active' : t.status));
-    if (t.priority) meta.appendChild(span('badge badge-' + t.priority.toLowerCase(), t.priority));
-    if (isManager) meta.appendChild(span('assigned-chip', t.assignedMember));
-    var dl = deadlineChip(t); if (dl) meta.appendChild(dl);
-    var time = span('time-chip' + (t.isLive ? ' live' : ''),
-                    (t.isLive ? '● ' : '') + fmtHours(t.timeSpentHrs));
-    time.dataset.baseHours = t.timeSpentHrs;
+    var meta = node('div', 'card-meta');
+    meta.appendChild(node('span', 'state st-' + st, t.status));
+    if (t.priority) meta.appendChild(node('span', 'pill pill-' + t.priority.toLowerCase(), t.priority));
+    if (isManager)  meta.appendChild(node('span', 'pill pill-who', t.assignedMember));
+
+    if (t.deadlineStr) {
+      if (t.isOverdue && isNum(t.hoursOvertime)) {
+        meta.appendChild(node('span', 'pill pill-dl-over', dur(t.hoursOvertime) + ' over'));
+      } else if (isNum(t.hoursRemaining)) {
+        meta.appendChild(node('span', 'pill pill-dl-' + (t.hoursRemaining < 4 ? 'soon' : 'ok'),
+                              dur(t.hoursRemaining) + ' left'));
+      }
+    }
+
+    var time = node('span', 'card-time' + (t.isLive ? ' live' : ''), hhmm(t.timeSpentHrs));
+    time.dataset.base = t.timeSpentHrs;
     time.dataset.live = t.isLive ? '1' : '0';
     meta.appendChild(time);
 
-    // actions
-    var actions = document.createElement('div'); actions.className = 'card-actions';
-    actions.appendChild(actionButton('Start', 'btn-start', t.taskId, 'In Progress',
-      t.status === 'In Progress' || t.status === 'Done'));
-    actions.appendChild(actionButton('Pause', 'btn-pause', t.taskId, 'Paused',
-      t.status !== 'In Progress'));
-    actions.appendChild(actionButton('Done', 'btn-done', t.taskId, 'Done',
-      t.status === 'Done'));
+    var acts = node('div', 'card-actions');
+    acts.appendChild(actBtn('Start', 'go',  t, 'In Progress', t.status === 'In Progress' || t.status === 'Done'));
+    acts.appendChild(actBtn('Pause', '',    t, 'Paused',      t.status !== 'In Progress'));
+    acts.appendChild(actBtn('Done',  '',    t, 'Done',        t.status === 'Done'));
+    var notes = node('button', 'act notes', 'Notes');
+    notes.title = 'Open the conversation for ' + t.taskId;
+    notes.onclick = function () { openFocus(t.taskId); };
+    acts.appendChild(notes);
 
-    card.appendChild(top); card.appendChild(meta); card.appendChild(actions);
-    list.appendChild(card);
+    card.appendChild(top); card.appendChild(meta); card.appendChild(acts);
+    grid.appendChild(card);
+  });
+}
+
+function actBtn(label, extra, t, status, disabled) {
+  var b = node('button', 'act ' + extra, label);
+  b.disabled = disabled;
+  if (!disabled) b.onclick = function () { setStatus(t.taskId, status, b); };
+  return b;
+}
+
+// ---------------------------------------------------------------- pagination
+function renderPager() {
+  var total = filtered.length;
+  var pages = Math.max(1, Math.ceil(total / perPage));
+  el('pager').hidden = false;
+
+  var from = total ? (page - 1) * perPage + 1 : 0;
+  var to   = Math.min(page * perPage, total);
+  el('pager-label').textContent = 'Showing ' + from + '–' + to + ' of ' +
+    total.toLocaleString() + ' records' +
+    (omittedOld ? ' · ' + omittedOld.toLocaleString() + ' finished hidden' : '');
+
+  var c = el('pager-controls');
+  c.innerHTML = '';
+
+  function pgBtn(label, target, opts) {
+    var b = node('button', 'pg' + (opts && opts.on ? ' on' : ''), label);
+    b.disabled = !!(opts && opts.off);
+    if (!b.disabled && !(opts && opts.on)) b.onclick = function () { page = target; applyFilters(); };
+    return b;
+  }
+
+  c.appendChild(pgBtn('Previous', page - 1, { off: page === 1 }));
+
+  // Windowed page numbers, so 16 pages does not render 16 buttons.
+  var nums = [];
+  for (var i = 1; i <= pages; i++) {
+    if (i === 1 || i === pages || Math.abs(i - page) <= 1) nums.push(i);
+    else if (nums[nums.length - 1] !== '…') nums.push('…');
+  }
+  nums.forEach(function (n) {
+    if (n === '…') c.appendChild(node('span', 'pg-gap', '…'));
+    else c.appendChild(pgBtn(String(n), n, { on: n === page }));
   });
 
-  if (total > RENDER_CAP) {
-    list.appendChild(span('no-tasks',
-      'Showing ' + RENDER_CAP + ' of ' + total + '. Use search or the filters to narrow it down.'));
-  }
+  c.appendChild(pgBtn('Next', page + 1, { off: page >= pages }));
+
+  var sel = node('select', 'per-page');
+  sel.setAttribute('aria-label', 'Rows per page');
+  [10, 25, 50].forEach(function (n) {
+    var o = document.createElement('option');
+    o.value = n; o.textContent = n + ' / page';
+    if (n === perPage) o.selected = true;
+    sel.appendChild(o);
+  });
+  sel.onchange = function () { perPage = +sel.value; page = 1; applyFilters(); };
+  c.appendChild(sel);
 }
 
-/** Running timers advance in the browser instead of sitting frozen until a refresh. */
-function startLiveTicker() {
-  if (liveTimer) clearInterval(liveTimer);
-  liveTimer = setInterval(function () {
-    document.querySelectorAll('.time-chip[data-live="1"]').forEach(function (chip) {
-      var base = parseFloat(chip.dataset.baseHours) || 0;
-      chip.dataset.baseHours = base + (1 / 120);   // 30s tick
-      chip.textContent = '● ' + fmtHours(base + (1 / 120));
-    });
-  }, 30000);
-}
-
-// ---------------------------------------------------------------------------
-// STATUS UPDATES
-// ---------------------------------------------------------------------------
-function updateStatus(taskId, newStatus, btn) {
+// -------------------------------------------------------------- status write
+function setStatus(taskId, status, btn) {
   btn.disabled = true;
-  showLoading(taskId + ' → ' + newStatus + '…');
-
+  showOverlay(taskId + ' → ' + status + '…');
   google.script.run
-    .withSuccessHandler(function (res) {
-      hideLoading();
-      if (res && res.success) { showToast(taskId + ' → ' + newStatus, 'success'); loadTasks(); }
-      else { showToast((res && res.error) || 'Update failed', 'error'); btn.disabled = false; }
+    .withSuccessHandler(function (r) {
+      hideOverlay();
+      if (r && r.success) { toast(taskId + ' → ' + status, 'ok'); loadTasks(); }
+      else { toast((r && r.error) || 'Update failed', 'bad'); btn.disabled = false; }
     })
-    .withFailureHandler(function (err) {
-      hideLoading(); showToast('Error: ' + err.message, 'error'); btn.disabled = false;
-    })
-    .updateStatusFromSidebar(taskId, newStatus);
+    .withFailureHandler(function (e) { hideOverlay(); toast(e.message, 'bad'); btn.disabled = false; })
+    .updateStatusFromSidebar(taskId, status);
 }
 
-// ---------------------------------------------------------------------------
-// BULK
-// ---------------------------------------------------------------------------
-function onCheckChange(checked, taskId, card) {
-  if (checked) { selectedIds[taskId] = true; card.classList.add('selected'); }
-  else { delete selectedIds[taskId]; card.classList.remove('selected'); }
-  updateBulkBar();
-}
-
-function selectedList() { return Object.keys(selectedIds); }
-
-function updateBulkBar() {
-  var n = selectedList().length;
-  el('bulk-bar').classList.toggle('visible', n > 0);
+// --------------------------------------------------------------------- bulk
+function toggleSelect(on, id, card) {
+  if (on) { selected[id] = true; card.classList.add('selected'); }
+  else { delete selected[id]; card.classList.remove('selected'); }
+  var n = Object.keys(selected).length;
+  el('bulkbar').classList.toggle('visible', n > 0);
   el('bulk-count').textContent = n + ' selected';
 }
 
 function clearSelection() {
-  selectedIds = {};
-  document.querySelectorAll('.card-checkbox').forEach(function (c) { c.checked = false; });
-  document.querySelectorAll('.task-card').forEach(function (c) { c.classList.remove('selected'); });
-  updateBulkBar();
+  selected = {};
+  el('bulkbar').classList.remove('visible');
+  renderGrid();
 }
 
-function bulkAction(newStatus) {
-  var ids = selectedList();
+function bulkAction(status) {
+  var ids = Object.keys(selected);
   if (!ids.length) return;
-  showLoading('Updating ' + ids.length + ' task(s)…');
-
+  showOverlay('Updating ' + ids.length + ' task(s)…');
   google.script.run
-    .withSuccessHandler(function (res) {
-      hideLoading();
-      if (!res || !res.success) { showToast((res && res.error) || 'Bulk update failed', 'error'); return; }
-      var msg = 'Updated ' + res.updated + ' → ' + newStatus;
-      if (res.failed) msg += ' · ' + res.failed + ' failed';
-      showToast(msg, res.failed ? 'error' : 'success');
-      if (res.errors && res.errors.length) console.log('Bulk errors:', res.errors);
-      clearSelection();
+    .withSuccessHandler(function (r) {
+      hideOverlay();
+      if (!r || !r.success) { toast((r && r.error) || 'Bulk update failed', 'bad'); return; }
+      toast('Updated ' + r.updated + ' → ' + status + (r.failed ? ' · ' + r.failed + ' failed' : ''),
+            r.failed ? 'bad' : 'ok');
+      selected = {};
+      el('bulkbar').classList.remove('visible');
       loadTasks();
     })
-    .withFailureHandler(function (err) { hideLoading(); showToast('Error: ' + err.message, 'error'); })
-    .bulkUpdateStatusFromSidebar(ids, newStatus);
+    .withFailureHandler(function (e) { hideOverlay(); toast(e.message, 'bad'); })
+    .bulkUpdateStatusFromSidebar(ids, status);
 }
 
-// ---------------------------------------------------------------------------
-// UI HELPERS
-// ---------------------------------------------------------------------------
-function showLoading(text) {
-  el('loading-text').textContent = text || 'Loading…';
-  el('loading').classList.add('visible');
+// ------------------------------------------------------------------- chrome
+function startTicker() {
+  if (liveTimer) clearInterval(liveTimer);
+  liveTimer = setInterval(function () {
+    document.querySelectorAll('[data-live="1"]').forEach(function (n) {
+      var base = parseFloat(n.dataset.base) || 0;
+      base += 1 / 120;                      // 30s tick
+      n.dataset.base = base;
+      n.textContent = hhmm(base);
+    });
+  }, 30000);
 }
-function hideLoading() { el('loading').classList.remove('visible'); }
+
+function showOverlay(t) { el('overlay-text').textContent = t || 'Working…'; el('overlay').classList.add('visible'); }
+function hideOverlay()  { el('overlay').classList.remove('visible'); }
 
 var toastTimer = null;
-function showToast(msg, type) {
+function toast(msg, kind) {
   var t = el('toast');
   t.textContent = msg;
-  t.className = 'toast show ' + (type || '');
+  t.className = 'toast show ' + (kind || '');
   if (toastTimer) clearTimeout(toastTimer);
   toastTimer = setTimeout(function () { t.className = 'toast'; }, 3500);
 }

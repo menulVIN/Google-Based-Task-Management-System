@@ -48,6 +48,13 @@ var MANAGER_EMAILS = [
 
 var MASTER_SHEET_NAME    = 'Master';
 var SUPPORT_SHEET_NAME   = 'Support Tracker';
+var COMMENTS_SHEET_NAME  = 'Comments';
+
+/** Minutes credited to a task when someone posts an update on it. */
+var COMMENT_LOGS_MINUTES = 15;
+
+/** No note and no status change for this long on a running task triggers the nudge. */
+var CHECKIN_IDLE_HOURS = 4;
 var ATTACHMENT_FOLDER_ID = '1o-YGGzVR3VjXoMFmX1hAl7usJ2OUBcoy';
 
 var MASTER_COL_TASK_ID  = 1;
@@ -1313,11 +1320,13 @@ function getSidebarTasks(filters) {
 
     var sessionStart = row[SESSION_START_COL - 1];
     var isLive = (sessionStart instanceof Date) && status === 'In Progress';
+    var idleHours = 0;
     if (isLive) {
       // Capped the same way a banked session is, so a timer left running since
       // last week shows 8h rather than 190h.
       var live = (now.getTime() - sessionStart.getTime()) / hourMs;
       timeSpentHrs += Math.max(0, Math.min(live, MAX_SESSION_HOURS));
+      idleHours = idleHoursFor_(String(row[0]), sessionStart);
     }
 
     var deadlineDt = null, isOverdue = false, hoursRemaining = null, hoursOvertime = null;
@@ -1351,7 +1360,9 @@ function getSidebarTasks(filters) {
       isOverdue: isOverdue,
       hoursRemaining: hoursRemaining,
       hoursOvertime: hoursOvertime,
-      isLive: isLive
+      isLive: isLive,
+      idleHours: idleHours,
+      needsCheckIn: isLive && idleHours >= CHECKIN_IDLE_HOURS
     });
   }
 
@@ -1485,6 +1496,156 @@ function bulkUpdateStatusFromSidebar(taskIds, newStatus) {
   } finally {
     lock.releaseLock();
   }
+}
+
+// ---------------------------------------------------------------------------
+// CONVERSATION — comments, activity and the check-in nudge
+//
+// The Master sheet has no room for a thread, so comments live in their own tab:
+//   1 Timestamp · 2 Task ID · 3 Author Email · 4 Author Name · 5 Kind · 6 Body
+// Append-only. Nothing here ever edits Master except the minutes a post logs.
+// ---------------------------------------------------------------------------
+
+var COMMENT_HEADERS = ['Timestamp', 'Task ID', 'Author Email', 'Author Name', 'Kind', 'Body'];
+
+function commentsSheet_() {
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheet = ss.getSheetByName(COMMENTS_SHEET_NAME);
+  if (!sheet) {
+    sheet = ss.insertSheet(COMMENTS_SHEET_NAME);
+    sheet.getRange(1, 1, 1, COMMENT_HEADERS.length).setValues([COMMENT_HEADERS])
+         .setBackground('#00712D').setFontColor('#FFFFFF').setFontWeight('bold');
+    sheet.setFrozenRows(1);
+    sheet.setColumnWidth(1, 150); sheet.setColumnWidth(2, 95);
+    sheet.setColumnWidth(3, 210); sheet.setColumnWidth(4, 110);
+    sheet.setColumnWidth(5, 80);  sheet.setColumnWidth(6, 620);
+  }
+  return sheet;
+}
+
+/** "Venul Minsara" -> "VM"; an email falls back to its first two letters. */
+function initials_(name, email) {
+  var src = String(name || '').trim() || String(email || '').split('@')[0];
+  var parts = src.split(/[\s._-]+/).filter(String);
+  if (!parts.length) return '?';
+  return (parts.length === 1 ? parts[0].slice(0, 2) : parts[0][0] + parts[1][0]).toUpperCase();
+}
+
+function displayName_(email) {
+  var e = String(email || '').toLowerCase();
+  for (var name in DEV_EMAILS) if (String(DEV_EMAILS[name]).toLowerCase() === e) return name;
+  return String(email || '').split('@')[0] || 'Someone';
+}
+
+function relativeWhen_(d) {
+  var mins = Math.round((Date.now() - d.getTime()) / 60000);
+  if (mins < 1)    return 'just now';
+  if (mins < 60)   return mins + 'm ago';
+  var hrs = Math.floor(mins / 60);
+  if (hrs < 24)    return hrs + 'h ago';
+  var days = Math.floor(hrs / 24);
+  if (days < 7)    return days + 'd ago';
+  return Utilities.formatDate(d, Session.getScriptTimeZone(), 'dd/MM/yyyy');
+}
+
+/** Whole thread for one task, oldest first. */
+function getTaskThread(taskId) {
+  taskId = String(taskId || '').trim();
+  if (!/^TASK-\d+$/.test(taskId)) return { comments: [] };
+
+  var sheet = commentsSheet_();
+  var last = getRealLastRow(sheet);
+  if (last < 2) return { comments: [] };
+
+  var rows = sheet.getRange(2, 1, last - 1, COMMENT_HEADERS.length).getValues();
+  var out = [];
+  for (var i = 0; i < rows.length; i++) {
+    if (String(rows[i][1]).trim() !== taskId) continue;
+    var when = rows[i][0] instanceof Date ? rows[i][0] : null;
+    out.push({
+      when:     when ? relativeWhen_(when) : '',
+      stamp:    when ? when.getTime() : 0,
+      email:    String(rows[i][2]),
+      name:     String(rows[i][3]) || displayName_(rows[i][2]),
+      initials: initials_(rows[i][3], rows[i][2]),
+      kind:     String(rows[i][4] || 'comment'),
+      body:     String(rows[i][5])
+    });
+  }
+  out.sort(function (a, b) { return a.stamp - b.stamp; });
+  return { comments: out };
+}
+
+/**
+ * Posts an update. Also credits COMMENT_LOGS_MINUTES against the task, which is
+ * what makes the thread worth using — a note is work, and it keeps the task off
+ * the follow-up list.
+ */
+function addComment(taskId, body, alsoLogMinutes) {
+  taskId = String(taskId || '').trim();
+  body = String(body || '').trim();
+
+  if (!/^TASK-\d+$/.test(taskId)) return { success: false, error: 'Unknown task: ' + taskId };
+  if (!body) return { success: false, error: 'Write something first.' };
+  if (body.length > 4000) return { success: false, error: 'Too long — keep it under 4000 characters.' };
+
+  var lock = LockService.getScriptLock();
+  try { lock.waitLock(15000); } catch (e) { return { success: false, error: 'Server busy. Try again.' }; }
+
+  try {
+    var ss = SpreadsheetApp.getActiveSpreadsheet();
+    var masterSheet = ss.getSheetByName(MASTER_SHEET_NAME);
+    if (!findRowInSheet_(masterSheet, taskId)) return { success: false, error: taskId + ' is not in Master.' };
+
+    var email = currentEmail_();
+    var sheet = commentsSheet_();
+    sheet.getRange(getRealLastRow(sheet) + 1, 1, 1, COMMENT_HEADERS.length)
+         .setValues([[new Date(), taskId, email, displayName_(email), 'comment', body]]);
+
+    var logged = 0;
+    if (alsoLogMinutes !== false) {
+      var row = findRowInSheet_(masterSheet, taskId);
+      var previous = toDayFraction_(masterSheet.getRange(row, TOTAL_TIME_COL).getValue());
+      masterSheet.getRange(row, TOTAL_TIME_COL).setValue(previous + (COMMENT_LOGS_MINUTES / 60 / 24));
+
+      var assigned = String(masterSheet.getRange(row, MASTER_COL_ASSIGNED).getValue()).trim();
+      if (DEVELOPER_SHEET_NAMES.indexOf(assigned) !== -1) {
+        var dev = ss.getSheetByName(assigned);
+        var devRow = dev ? findRowInSheet_(dev, taskId) : null;
+        if (devRow) dev.getRange(devRow, TOTAL_TIME_COL).setValue(previous + (COMMENT_LOGS_MINUTES / 60 / 24));
+      }
+      logged = COMMENT_LOGS_MINUTES;
+    }
+
+    SpreadsheetApp.flush();
+    return { success: true, loggedMinutes: logged, thread: getTaskThread(taskId).comments };
+  } catch (e) {
+    return { success: false, error: e.message };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/**
+ * Hours since anything was recorded against a running task — the newest of its
+ * last comment or the moment it started. Drives the check-in nudge, which only
+ * has meaning because a real idle signal now exists.
+ */
+function idleHoursFor_(taskId, sessionStart) {
+  var newest = (sessionStart instanceof Date) ? sessionStart.getTime() : 0;
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(COMMENTS_SHEET_NAME);
+  if (sheet) {
+    var last = getRealLastRow(sheet);
+    if (last >= 2) {
+      var rows = sheet.getRange(2, 1, last - 1, 2).getValues();
+      for (var i = 0; i < rows.length; i++) {
+        if (String(rows[i][1]).trim() !== taskId) continue;
+        if (rows[i][0] instanceof Date && rows[i][0].getTime() > newest) newest = rows[i][0].getTime();
+      }
+    }
+  }
+  if (!newest) return 0;
+  return (Date.now() - newest) / (60 * 60 * 1000);
 }
 
 // ---------------------------------------------------------------------------
