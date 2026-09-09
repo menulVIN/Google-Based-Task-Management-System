@@ -1,0 +1,717 @@
+<title>Master Log Handbook</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Source+Sans+3:ital,wght@0,400;0,600;1,400&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+
+<style>
+  :root {
+    --ground:      #F6F8F2;
+    --surface:     #FFFFFF;
+    --surface-alt: #EDF1E6;
+    --ink:         #1B2116;
+    --ink-soft:    #5A6353;
+    --ink-faint:   #8A9382;
+    --rule:        #DCE2D2;
+    --green:       #4F7F00;
+    --green-bright:#76B900;
+    --amber:       #A8690B;
+    --amber-bg:    #FBF1DF;
+    --red:         #B23227;
+    --red-bg:      #FBEAE7;
+    --blue:        #26688F;
+    --blue-bg:     #E7F0F6;
+    --shadow:      0 1px 2px rgba(27,33,22,.06);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:#12150F; --surface:#1A1E15; --surface-alt:#222719;
+      --ink:#E9EEE1; --ink-soft:#A8B29C; --ink-faint:#79836E;
+      --rule:#2E3527; --green:#9BD41F; --green-bright:#A8E028;
+      --amber:#E0A34A; --amber-bg:#2B2313; --red:#E88478; --red-bg:#2E1815;
+      --blue:#7FBADC; --blue-bg:#152631; --shadow:0 1px 2px rgba(0,0,0,.4);
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground:#12150F; --surface:#1A1E15; --surface-alt:#222719;
+    --ink:#E9EEE1; --ink-soft:#A8B29C; --ink-faint:#79836E;
+    --rule:#2E3527; --green:#9BD41F; --green-bright:#A8E028;
+    --amber:#E0A34A; --amber-bg:#2B2313; --red:#E88478; --red-bg:#2E1815;
+    --blue:#7FBADC; --blue-bg:#152631; --shadow:0 1px 2px rgba(0,0,0,.4);
+  }
+
+  * { box-sizing: border-box; }
+  body {
+    background: var(--ground); color: var(--ink);
+    font-family: "Source Sans 3", system-ui, sans-serif;
+    font-size: 16.5px; line-height: 1.62; margin: 0;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 0 24px 100px;
+          display: grid; grid-template-columns: 1fr; gap: 0; }
+  @media (min-width: 1000px) {
+    .wrap { grid-template-columns: 196px minmax(0,1fr); gap: 52px; padding-top: 8px; }
+  }
+
+  /* ---- masthead ---- */
+  .masthead { grid-column: 1 / -1; padding: 44px 0 30px; border-bottom: 2px solid var(--ink); }
+  .eyebrow { font-family: "IBM Plex Mono", monospace; font-size: 11.5px;
+             letter-spacing: .16em; text-transform: uppercase; color: var(--green);
+             font-weight: 600; margin-bottom: 14px; }
+  h1 { font-family: Archivo, system-ui, sans-serif; font-weight: 700;
+       font-size: clamp(2.1rem, 5.2vw, 3.3rem); line-height: 1.02;
+       letter-spacing: -.028em; margin: 0 0 14px; text-wrap: balance; }
+  .standfirst { font-size: 1.12rem; color: var(--ink-soft); max-width: 60ch; margin: 0; }
+  .byline { margin-top: 20px; font-family: "IBM Plex Mono", monospace;
+            font-size: 12px; color: var(--ink-faint); display: flex;
+            flex-wrap: wrap; gap: 8px 20px; }
+  .byline a { color: var(--green); text-decoration: none; border-bottom: 1px solid var(--rule); }
+  .byline a:hover { border-color: var(--green); }
+
+  /* ---- side nav ---- */
+  nav.toc { display: none; }
+  @media (min-width: 1000px) {
+    nav.toc { display: block; position: sticky; top: 28px; align-self: start;
+              padding-top: 40px; }
+    nav.toc ol { list-style: none; margin: 0; padding: 0;
+                 counter-reset: s; display: flex; flex-direction: column; gap: 2px; }
+    nav.toc a { display: flex; gap: 9px; text-decoration: none; color: var(--ink-soft);
+                font-size: 13.5px; padding: 4px 0; line-height: 1.35; }
+    nav.toc a::before { counter-increment: s; content: counter(s, decimal-leading-zero);
+                        font-family: "IBM Plex Mono", monospace; font-size: 11px;
+                        color: var(--ink-faint); padding-top: 2px; }
+    nav.toc a:hover { color: var(--green); }
+  }
+
+  main { padding-top: 40px; min-width: 0; }
+  section { margin-bottom: 54px; scroll-margin-top: 22px; }
+  h2 { font-family: Archivo, system-ui, sans-serif; font-weight: 700;
+       font-size: 1.62rem; letter-spacing: -.018em; margin: 0 0 6px;
+       text-wrap: balance; }
+  h2 .num { font-family: "IBM Plex Mono", monospace; font-size: .68em;
+            color: var(--green); font-weight: 500; margin-right: 10px; }
+  h3 { font-family: Archivo, system-ui, sans-serif; font-weight: 600;
+       font-size: 1.06rem; margin: 30px 0 7px; letter-spacing: -.008em; }
+  p { margin: 0 0 14px; max-width: 66ch; }
+  .lede { color: var(--ink-soft); margin-bottom: 22px; max-width: 62ch; }
+  strong { font-weight: 600; }
+  code { font-family: "IBM Plex Mono", monospace; font-size: .87em;
+         background: var(--surface-alt); padding: 1.5px 5px; border-radius: 3px; }
+  a { color: var(--green); }
+
+  /* ---- the one rule ---- */
+  .rule-box { background: var(--surface); border-left: 4px solid var(--green-bright);
+              padding: 24px 26px; border-radius: 0 8px 8px 0; box-shadow: var(--shadow);
+              margin: 0 0 22px; }
+  .rule-box p:last-child { margin-bottom: 0; }
+  .rule-headline { font-family: Archivo, sans-serif; font-weight: 700;
+                   font-size: 1.28rem; margin: 0 0 10px; letter-spacing: -.014em; }
+
+  .callout { padding: 15px 18px; border-radius: 7px; margin: 0 0 20px;
+             font-size: .94rem; border: 1px solid transparent; }
+  .callout p { margin: 0; max-width: none; }
+  .callout p + p { margin-top: 8px; }
+  .callout.warn { background: var(--amber-bg); border-color: color-mix(in srgb, var(--amber) 30%, transparent); }
+  .callout.stop { background: var(--red-bg); border-color: color-mix(in srgb, var(--red) 32%, transparent); }
+  .callout.note { background: var(--blue-bg); border-color: color-mix(in srgb, var(--blue) 28%, transparent); }
+  .callout .tag { font-family: "IBM Plex Mono", monospace; font-size: 10.5px;
+                  letter-spacing: .14em; text-transform: uppercase; font-weight: 600;
+                  display: block; margin-bottom: 5px; }
+  .callout.warn .tag { color: var(--amber); }
+  .callout.stop .tag { color: var(--red); }
+  .callout.note .tag { color: var(--blue); }
+
+  /* ---- steps ---- */
+  ol.steps { list-style: none; counter-reset: st; margin: 0 0 20px; padding: 0;
+             display: flex; flex-direction: column; gap: 16px; }
+  ol.steps > li { counter-increment: st; display: grid;
+                  grid-template-columns: 30px minmax(0,1fr);
+                  column-gap: 14px; row-gap: 4px; align-items: start; }
+  ol.steps > li::before { content: counter(st); grid-column: 1; grid-row: 1;
+    font-family: "IBM Plex Mono", monospace;
+    font-weight: 600; font-size: 13px; color: var(--green); background: var(--surface);
+    border: 1px solid var(--rule); border-radius: 50%; width: 30px; height: 30px;
+    display: grid; place-items: center; }
+  /* Every paragraph sits in column 2. Without this the second <p> of a step
+     auto-flows into the 30px number column and wraps one word per line. */
+  ol.steps > li > p { grid-column: 2; margin: 0; min-width: 0; max-width: 62ch; }
+  ol.steps .st-title { font-weight: 600; align-self: center; min-height: 30px;
+                       display: flex; align-items: center; }
+
+  /* ---- tables ---- */
+  .table-scroll { overflow-x: auto; margin: 0 0 20px;
+                  border: 1px solid var(--rule); border-radius: 8px; background: var(--surface); }
+  table { border-collapse: collapse; width: 100%; font-size: .92rem; }
+  th { text-align: left; font-family: "IBM Plex Mono", monospace; font-size: 10.5px;
+       letter-spacing: .12em; text-transform: uppercase; color: var(--ink-faint);
+       font-weight: 600; padding: 11px 15px; border-bottom: 1px solid var(--rule);
+       white-space: nowrap; background: var(--surface-alt); }
+  td { padding: 11px 15px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  td:first-child { font-weight: 600; white-space: nowrap; }
+  td.wrapok:first-child { white-space: normal; }
+
+  /* ---- column strip: the signature element ---- */
+  .cols { display: grid; grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+          gap: 5px; margin: 0 0 16px; }
+  .col { background: var(--surface); border: 1px solid var(--rule); border-radius: 5px;
+         padding: 8px 10px; display: flex; gap: 9px; align-items: baseline; min-width: 0; }
+  .col .n { font-family: "IBM Plex Mono", monospace; font-size: 11px; font-weight: 600;
+            color: var(--ink-faint); flex: none; font-variant-numeric: tabular-nums; }
+  .col .nm { font-size: 12.5px; line-height: 1.3; overflow-wrap: anywhere; }
+  .col.locked { background: var(--surface-alt); }
+  .col.locked .nm { color: var(--ink-faint); }
+  .col.you { border-color: color-mix(in srgb, var(--green) 45%, var(--rule)); }
+  .col.you .n { color: var(--green); }
+  .legend { display: flex; flex-wrap: wrap; gap: 8px 20px; font-size: 12.5px;
+            color: var(--ink-soft); margin-bottom: 22px; }
+  .legend span { display: flex; align-items: center; gap: 7px; }
+  .swatch { width: 13px; height: 13px; border-radius: 3px; border: 1px solid var(--rule); flex: none; }
+  .swatch.lock { background: var(--surface-alt); }
+  .swatch.edit { background: var(--surface);
+                 border-color: color-mix(in srgb, var(--green) 45%, var(--rule)); }
+
+  /* ---- code ---- */
+  pre { background: var(--surface); border: 1px solid var(--rule); border-radius: 7px;
+        padding: 15px 17px; overflow-x: auto; margin: 0 0 18px;
+        font-family: "IBM Plex Mono", monospace; font-size: 12.5px; line-height: 1.65; }
+  pre code { background: none; padding: 0; font-size: inherit; }
+  .tsv { white-space: pre; }
+  .tsv .tab { color: var(--ink-faint); }
+
+  /* ---- live UI replicas ------------------------------------------------
+     Rendered from the app's real CSS rather than pasted screenshots, so they
+     stay sharp at any width and cannot drift from the shipped interface.
+     The app is light-only, so these keep fixed colours in both guide themes. */
+  .ui { border: 1px solid var(--rule); border-radius: 8px; overflow: hidden;
+        margin: 0 0 22px; box-shadow: var(--shadow); }
+  .ui-bar { background: var(--surface-alt); padding: 8px 13px; border-bottom: 1px solid var(--rule);
+            font-family: "IBM Plex Mono", monospace; font-size: 10.5px; letter-spacing: .12em;
+            text-transform: uppercase; color: var(--ink-faint); font-weight: 600;
+            display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+  .ui-bar em { font-style: normal; color: var(--green); }
+  .ui-body { background: #f5f6fa; padding: 12px; color: #2c3e50;
+             font-family: Arial, sans-serif; font-size: 13px; line-height: 1.45; }
+
+  /* stats strip */
+  .ui-stats { display: flex; background: #fff; border: 1px solid #e4e7eb;
+              border-radius: 6px; margin-bottom: 10px; overflow: hidden; }
+  .ui-stat { flex: 1; padding: 7px 2px; text-align: center; border-right: 1px solid #e4e7eb; min-width: 0; }
+  .ui-stat:last-child { border-right: none; }
+  .ui-stat.on { background: #F0F8EC; box-shadow: inset 0 -2px 0 #76B900; }
+  .ui-stat b { display: block; font-size: 17px; line-height: 1.15; font-variant-numeric: tabular-nums; }
+  .ui-stat s { display: block; font-size: 9px; text-decoration: none; color: #7b8794;
+               text-transform: uppercase; letter-spacing: .4px; margin-top: 1px; }
+
+  /* task cards */
+  .ui-cards { display: grid; gap: 8px; grid-template-columns: 1fr; }
+  @media (min-width: 700px) { .ui-cards.two { grid-template-columns: 1fr 1fr; } }
+  .ui-card { background: #fff; border-radius: 7px; border-left: 4px solid #dfe3e8;
+             box-shadow: 0 1px 2px rgba(16,24,40,.06); overflow: hidden; min-width: 0; }
+  .ui-card.s-active  { border-left-color: #76B900; }
+  .ui-card.s-over    { border-left-color: #e74c3c; }
+  .ui-card.s-done    { border-left-color: #3498db; opacity: .68; }
+  .ui-card.s-blocked { border-left-color: #8e44ad; }
+  .ui-ctop { display: flex; gap: 9px; padding: 10px 11px 7px; align-items: flex-start; }
+  .ui-box { width: 13px; height: 13px; border: 1.5px solid #b6bfc9; border-radius: 3px;
+            margin-top: 3px; flex: none; background: #fff; }
+  .ui-cmain { min-width: 0; flex: 1; }
+  .ui-cid { font-size: 10px; color: #7b8794; font-weight: 700; letter-spacing: .5px; margin-bottom: 3px; }
+  .ui-csum { font-size: 13px; font-weight: 700; line-height: 1.35; overflow-wrap: anywhere; }
+  .ui-ccli { font-size: 11px; color: #7b8794; margin-top: 4px;
+             white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ui-cmeta { display: flex; gap: 5px; padding: 0 11px 9px; flex-wrap: wrap; align-items: center; }
+  .ui-b { display: inline-block; padding: 2px 7px; border-radius: 9px; font-size: 9px;
+          font-weight: 700; text-transform: uppercase; letter-spacing: .4px; white-space: nowrap; }
+  .b-new { background:#eef1f3; color:#6b7785; }  .b-act { background:#eafcd8; color:#5B9000; }
+  .b-crit{ background:#fde8e8; color:#c0392b; }  .b-high{ background:#fef3e2; color:#b9770e; }
+  .b-low { background:#eef1f3; color:#6b7785; }  .b-done{ background:#eaf4ff; color:#2471a3; }
+  .ui-chip { display:inline-block; font-size:10px; padding:2px 7px; border-radius:9px;
+             font-weight:600; white-space:nowrap; }
+  .c-over { background:#fde8e8; color:#c0392b; } .c-urg { background:#fef3e2; color:#b9770e; }
+  .c-ok   { background:#eef1f3; color:#5b6672; } .c-who { background:#eef1f3; color:#5b6672; font-weight:400; }
+  .ui-time { font-size:10px; color:#7b8794; margin-left:auto; white-space:nowrap;
+             font-variant-numeric:tabular-nums; padding-left:4px; }
+  .ui-time.live { color:#5B9000; font-weight:700; }
+  .ui-cact { display: flex; gap: 6px; padding: 0 11px 11px; }
+  .ui-btn { flex: 1 1 0; min-width: 0; padding: 7px 4px; border: none; border-radius: 5px;
+            font-size: 11px; font-weight: 700; color: #fff; text-align: center; white-space: nowrap; }
+  .ui-btn.start { background:#76B900; } .ui-btn.pause { background:#f39c12; }
+  .ui-btn.done  { background:#3498db; } .ui-btn.off { opacity:.28; }
+
+  /* bulk verdict rows */
+  .ui-rows { background:#fff; border:1px solid #e4e7eb; border-radius:6px; overflow:hidden; }
+  .ui-row { display:grid; grid-template-columns:34px 74px minmax(0,1fr); gap:10px;
+            padding:9px 11px; border-bottom:1px solid #eef1f3; align-items:start; }
+  .ui-row:last-child { border-bottom:none; }
+  .ui-row.r-warn { background:#fff8e1; } .ui-row.r-err { background:#fdecea; }
+  .ui-row .no { font-family:"IBM Plex Mono",monospace; font-size:11px; color:#98a1ab;
+                font-variant-numeric:tabular-nums; padding-top:1px; }
+  .ui-tag { display:inline-block; padding:1px 7px; border-radius:9px; font-size:9px;
+            font-weight:700; text-transform:uppercase; letter-spacing:.4px; white-space:nowrap; }
+  .t-ok { background:#e8f5e9; color:#2e7d32; } .t-warn { background:#fff3e0; color:#b9770e; }
+  .t-err{ background:#fde8e8; color:#c0392b; }
+  .ui-row .txt { font-size:12px; min-width:0; overflow-wrap:anywhere; }
+  .ui-row .sub { font-size:11px; margin-top:3px; }
+  .ui-row .sub.e { color:#c0392b; } .ui-row .sub.w { color:#8a5a00; }
+
+  /* form field states */
+  .ui-fields { display:grid; gap:11px; grid-template-columns:1fr; }
+  @media (min-width:640px) { .ui-fields { grid-template-columns:1fr 1fr; } }
+  .ui-f label { display:block; font-size:11px; font-weight:700; color:#2c3e50; margin-bottom:4px; }
+  .ui-f .inp { background:#fff; border:1px solid #ccc; border-radius:5px; padding:8px 10px;
+               font-size:12.5px; color:#2c3e50; overflow:hidden; text-overflow:ellipsis;
+               white-space:nowrap; }
+  .ui-f.good .inp { border-color:#76B900; }
+  .ui-f.bad  .inp { border-color:#c0392b; }
+  .ui-f .msg { font-size:11px; margin-top:4px; color:#c0392b; }
+  .ui-feedback { margin-top:11px; padding:9px 11px; border-radius:5px; font-size:11.5px;
+                 background:#fdecea; color:#c62828; border:1px solid #ef9a9a; }
+
+  ul.plain { margin: 0 0 16px; padding-left: 20px; max-width: 66ch; }
+  ul.plain li { margin-bottom: 6px; }
+
+  footer { grid-column: 1 / -1; border-top: 2px solid var(--ink); padding-top: 20px;
+           margin-top: 20px; font-family: "IBM Plex Mono", monospace; font-size: 12px;
+           color: var(--ink-faint); display: flex; flex-wrap: wrap; gap: 8px 24px; }
+
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+  a:focus-visible, summary:focus-visible { outline: 2px solid var(--green); outline-offset: 3px; border-radius: 2px; }
+</style>
+
+<div class="wrap">
+
+  <header class="masthead">
+    <div class="eyebrow">Task Management Master Log</div>
+    <h1>Master Log Handbook</h1>
+    <p class="standfirst">How work that happens inside an AI IDE becomes a tracked, timed,
+       management-readable task — without anyone typing into the Master sheet.</p>
+    <div class="byline">
+      <span>Built &amp; maintained by Venul</span>
+      <span>Support · <a href="mailto:office.venulm@gmail.com">office.venulm@gmail.com</a></span>
+      <span>Rev 2026-09-08</span>
+    </div>
+  </header>
+
+  <nav class="toc" aria-label="Contents">
+    <ol>
+      <li><a href="#rule">The one rule</a></li>
+      <li><a href="#single">Submit one task</a></li>
+      <li><a href="#autofill">From IDE to task row</a></li>
+      <li><a href="#bulk">Bulk add</a></li>
+      <li><a href="#work">Working your tasks</a></li>
+      <li><a href="#sheet">Editing on the sheet</a></li>
+      <li><a href="#admin">The Admin menu</a></li>
+      <li><a href="#mcp">IDE connection</a></li>
+      <li><a href="#columns">The 23 columns</a></li>
+      <li><a href="#trouble">When it misbehaves</a></li>
+    </ol>
+  </nav>
+
+  <main>
+
+    <section id="rule">
+      <h2><span class="num">01</span>The one rule</h2>
+      <div class="rule-box">
+        <p class="rule-headline">Nobody types a new task into the Master sheet.</p>
+        <p>Master is written by the system, one of two ways: the <strong>web form</strong> for a
+           single task, or <strong>Tracker&nbsp;Options → Bulk Add Tasks</strong> for a batch.</p>
+      </div>
+      <p>This is not housekeeping. Typing straight into Master is what produced twelve task IDs
+         that each pointed at two different pieces of work. When that happens, a developer changing
+         their own task's status silently overwrites somebody else's row instead — the lookup finds
+         the first match and stops.</p>
+      <div class="callout warn">
+        <span class="tag">If a cell refuses your edit</span>
+        <p>That is the protection working, not a fault. Everything except Status, Developer Remark
+           and SVN Committed is written by the system.</p>
+      </div>
+    </section>
+
+    <section id="single">
+      <h2><span class="num">02</span>Submit one task</h2>
+      <p class="lede">Open the web form, fill it, submit. Fields marked with a red asterisk are required.</p>
+      <ul class="plain">
+        <li><strong>Attachments</strong> — drag files in or click the box. 5&nbsp;MB each. The Submit
+            button greys out while files are still being read; wait for it.</li>
+        <li><strong>Additional links</strong> — paste screenshots directly with Ctrl+V, or paste links as text.</li>
+        <li>You get the <strong>task ID</strong> back on success.</li>
+      </ul>
+      <div class="callout note">
+        <span class="tag">Failure is loud now</span>
+        <p>A red message means <strong>nothing was written</strong>, and everything you typed is still
+           on the form. Fix what it names and submit again.</p>
+        <p>The old build returned a plain string on error, so every failure arrived as a success —
+           green tick, form cleared, task never saved. That is gone.</p>
+      </div>
+      <div class="ui">
+        <div class="ui-bar"><span>Submission form — failure</span><em>nothing was written</em></div>
+        <div class="ui-body">
+          <div class="ui-fields">
+            <div class="ui-f"><label>Task Title / Summary</label>
+              <div class="inp">Fee Note queue misses the second approver</div></div>
+            <div class="ui-f"><label>Client / Project</label>
+              <div class="inp">Prathap Valuers</div></div>
+          </div>
+          <div class="ui-feedback">Task NOT saved: Server busy. Please try again.<br>
+            Your entries are still on the form. Fix the problem and submit again.</div>
+        </div>
+      </div>
+      <p>Everything you typed is still sitting there. Nothing to retype.</p>
+    </section>
+
+    <section id="autofill">
+      <h2><span class="num">03</span>From IDE to task row</h2>
+      <p class="lede">This is the point of the whole thing. You finish work in Antigravity or Claude
+         Code; the session notes become a task row without retyping.</p>
+      <ol class="steps">
+        <li><p class="st-title">Open the panel</p><p>On the form, click <strong>⚡ Auto-fill from AI</strong>, then <strong>Copy AI Prompt</strong>.</p></li>
+        <li><p class="st-title">Feed your AI</p><p>Paste the prompt, then your raw session notes where it says <code>[PASTE YOUR SESSION NOTES HERE]</code>.</p></li>
+        <li><p class="st-title">Copy the line</p><p>The AI replies with one long tab-separated line.</p></li>
+        <li><p class="st-title">Paste it back</p><p>Drop it into the box. The form fills itself.</p></li>
+      </ol>
+
+      <h3>Reading the result</h3>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>Outline</th><th>Meaning</th></tr></thead>
+          <tbody>
+            <tr><td>Green</td><td>Accepted</td></tr>
+            <tr><td>Red</td><td>The AI produced a value that is not in the dropdown — fix it by hand</td></tr>
+            <tr><td>None</td><td>Column was empty</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>The message below the box lists every problem at once, and <strong>your paste stays in the
+         box</strong> when it fails, so you can see what actually arrived.</p>
+
+      <h3>The prompt writes itself</h3>
+      <p>It is generated from the live configuration, so the team list and module list inside it
+         always match the dropdowns. When somebody joins or leaves, the prompt updates itself.
+         Do not keep an old copy in a text file — copy it fresh each time.</p>
+
+      <h3>Language the COO can read</h3>
+      <p>Task Summary and Remarks are read by management, who do not know our shorthand. The prompt
+         bans planning codes — <code>AC-082</code>, <code>V64</code>, <code>D-C22.1</code>,
+         <code>B305</code>, <code>Q7</code> — and makes the AI translate them into what they do.</p>
+      <div class="callout warn">
+        <span class="tag">The one exception</span>
+        <p>Client comment numbers come from the client's own document and must be spelled out in
+           full: <strong>“(Client Comment 24)”</strong>, never <code>C24</code>.</p>
+      </div>
+      <p>Developer Remark is for you and the next developer. Real file names, tables, endpoints and
+         functions belong there. Planning codes still do not.</p>
+      <div class="ui">
+        <div class="ui-bar"><span>After pasting — what the outlines mean</span><em>3 accepted · 1 rejected</em></div>
+        <div class="ui-body">
+          <div class="ui-fields">
+            <div class="ui-f good"><label>Task Summary</label>
+              <div class="inp">Fee Note queue misses the second approver</div></div>
+            <div class="ui-f good"><label>Module</label>
+              <div class="inp">Valuation ERP</div></div>
+            <div class="ui-f good"><label>Priority</label>
+              <div class="inp">Critical</div></div>
+            <div class="ui-f bad"><label>Issue Type</label>
+              <div class="inp">Bug-Fix</div>
+              <div class="msg">Not a valid option — the list has Bug-Core</div></div>
+          </div>
+          <div class="ui-feedback">Filled with warnings — the red fields need you:<br>
+            • "Bug-Fix" is not a valid issueType.</div>
+        </div>
+      </div>
+    </section>
+
+    <section id="bulk">
+      <h2><span class="num">04</span>Bulk add</h2>
+      <p class="lede">A work session usually produces several tasks. Ask your AI for one line per
+         task, newline separated, then <strong>Tracker Options → Bulk Add Tasks</strong>.</p>
+      <pre class="tsv"><code>[AUTO]<span class="tab">→</span>09/08/2026<span class="tab">→</span>Fix contact person edit losing address fields<span class="tab">→</span>Prathap Valuers<span class="tab">→</span>Valuation ERP<span class="tab">→</span>Bug-Core<span class="tab">→</span><span class="tab">→</span>Venul<span class="tab">→</span>…
+[AUTO]<span class="tab">→</span>09/08/2026<span class="tab">→</span>Reschedule modal wipes the follow-up date<span class="tab">→</span>Prathap Valuers<span class="tab">→</span>Valuation ERP<span class="tab">→</span>Bug-Core<span class="tab">→</span><span class="tab">→</span>Venul<span class="tab">→</span>…</code></pre>
+      <p><span style="font-family:'IBM Plex Mono',monospace;color:var(--ink-faint)">→</span>
+         marks a real tab character. If your AI sends spaces instead, the check will say so.</p>
+
+      <h3>Check before you import</h3>
+      <p>Press <strong>Check rows</strong> first. Nothing is written yet. Every row gets a verdict:</p>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>Verdict</th><th>Meaning</th></tr></thead>
+          <tbody>
+            <tr><td>Ready</td><td>Will import as-is</td></tr>
+            <tr><td>Warning</td><td>Will import, but read the note — usually an internal code that slipped into the summary, or a missing assignee defaulted to Unassigned</td></tr>
+            <tr><td>Blocked</td><td>Will not import. Fix it</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="callout note">
+        <span class="tag">All or nothing</span>
+        <p>Import stays locked while any row is Blocked, so you never end up with half a batch in
+           Master. On success you get the ID range that was created — <code>TASK-2460 … TASK-2472</code>.</p>
+        <p>Edit the box after checking and Import locks again. That stops you importing something
+           different from what you reviewed.</p>
+      </div>
+      <div class="ui">
+        <div class="ui-bar"><span>Check rows — preview before anything is written</span><em>2 ready · 1 blocked</em></div>
+        <div class="ui-body">
+          <div class="ui-rows">
+            <div class="ui-row">
+              <span class="no">1</span><span><i class="ui-tag t-ok">Ready</i></span>
+              <div class="txt">Fix contact person edit losing address fields · Prathap Valuers → Venul</div>
+            </div>
+            <div class="ui-row r-warn">
+              <span class="no">2</span><span><i class="ui-tag t-warn">Warning</i></span>
+              <div class="txt">Backfill availability counts (V48) · Prathap Valuers → Unassigned
+                <div class="sub w">! Summary contains an internal code — translate it to plain English.</div>
+                <div class="sub w">! No assignee — defaulted to Unassigned.</div>
+              </div>
+            </div>
+            <div class="ui-row r-err">
+              <span class="no">3</span><span><i class="ui-tag t-err">Blocked</i></span>
+              <div class="txt">Reschedule modal wipes follow-up date · Prathap Valuers → Udara
+                <div class="sub e">✕ Udara has left the company. Reassign this row.</div>
+              </div>
+            </div>
+          </div>
+          <div class="ui-feedback">Fix the 1 blocked row above, then check again. Nothing has been written.</div>
+        </div>
+      </div>
+    </section>
+
+    <section id="work">
+      <h2><span class="num">05</span>Working your tasks</h2>
+      <p class="lede">Two ways in. Same data, same buttons.</p>
+      <ul class="plain">
+        <li><strong>Inside the spreadsheet</strong> — Tracker Options → Open Task Dashboard.</li>
+        <li><strong>On the web</strong> — add <code>?page=mytasks</code> to the web app URL. No
+            spreadsheet needed. Use this one if you never open the sheet.</li>
+      </ul>
+
+      <h3>The cards</h3>
+      <ul class="plain">
+        <li>The <strong>colour bar on the left</strong> — grey New, green Active, orange Paused,
+            blue Done, purple Blocked, red Overdue.</li>
+        <li>The <strong>counters</strong> across the top are filters. Click one.</li>
+        <li><strong>Search</strong> matches summary, client or task ID.</li>
+        <li>The <strong>time chip</strong> shows total logged. A green dot means the clock is
+            running right now, and it ticks while you watch.</li>
+      </ul>
+
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>Button</th><th>What happens</th></tr></thead>
+          <tbody>
+            <tr><td>Start</td><td>Status → In Progress, clock starts</td></tr>
+            <tr><td>Pause</td><td>Clock stops, elapsed time is added to the total</td></tr>
+            <tr><td>Done</td><td>Clock stops, time banked, completion date and time stamped</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p>Time accumulates across sessions. Start / Pause all day; the total keeps adding up.
+         Pausing never resets it.</p>
+      <p>Tick several cards and the dark bar at the top will Start, Pause or Done all of them at once.</p>
+      <div class="ui">
+        <div class="ui-bar"><span>The dashboard — one column in the sidebar, more on the web</span><em>Overdue sorts first</em></div>
+        <div class="ui-body">
+          <div class="ui-stats">
+            <div class="ui-stat on"><b>5</b><s>Open</s></div>
+            <div class="ui-stat"><b style="color:#5B9000">1</b><s>Active</s></div>
+            <div class="ui-stat"><b style="color:#f39c12">1</b><s>Paused</s></div>
+            <div class="ui-stat"><b style="color:#e74c3c">2</b><s>Overdue</s></div>
+          </div>
+
+          <div class="ui-cards two">
+            <div class="ui-card s-over">
+              <div class="ui-ctop"><span class="ui-box"></span><div class="ui-cmain">
+                <div class="ui-cid">TASK-2459 · Sep 7</div>
+                <div class="ui-csum">RS2109 reservation cannot be checked in</div>
+                <div class="ui-ccli">Canal View Garden · FO</div>
+              </div></div>
+              <div class="ui-cmeta">
+                <span class="ui-b b-new">New</span><span class="ui-b b-crit">Critical</span>
+                <span class="ui-chip c-who">Eshani</span><span class="ui-chip c-over">19h over</span>
+                <span class="ui-time">—</span>
+              </div>
+              <div class="ui-cact">
+                <span class="ui-btn start">Start</span><span class="ui-btn pause off">Pause</span><span class="ui-btn done">Done</span>
+              </div>
+            </div>
+
+            <div class="ui-card s-active">
+              <div class="ui-ctop"><span class="ui-box"></span><div class="ui-cmain">
+                <div class="ui-cid">TASK-2461 · Sep 8</div>
+                <div class="ui-csum">Customer Balance Summary shows stale totals after a credit note is voided</div>
+                <div class="ui-ccli">Common · FIN</div>
+              </div></div>
+              <div class="ui-cmeta">
+                <span class="ui-b b-act">Active</span><span class="ui-b b-high">High</span>
+                <span class="ui-chip c-who">Venul</span><span class="ui-chip c-urg">2h left</span>
+                <span class="ui-time live">● 3h 24m</span>
+              </div>
+              <div class="ui-cact">
+                <span class="ui-btn start off">Start</span><span class="ui-btn pause">Pause</span><span class="ui-btn done">Done</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <p>Long summaries wrap to two lines and stop; the badges wrap onto their own row rather than
+         pushing the card sideways. Nothing is ever cut off, at any width.</p>
+    </section>
+
+    <section id="sheet">
+      <h2><span class="num">06</span>Editing on the sheet</h2>
+      <p class="lede">You can still work from the tabs. What syncs depends entirely on which tab
+         you are standing on — this catches people out.</p>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>You edit</th><th>What happens</th></tr></thead>
+          <tbody>
+            <tr><td>Your own tab</td><td>Syncs up to Master. Status starts and stops the timer. Works as intended.</td></tr>
+            <tr><td>Master</td><td><strong>Status changes do not sync down and do not run the timer.</strong> Only the Assigned column does anything — it moves the task to the new person's tab.</td></tr>
+            <tr><td>Another person's tab</td><td>Syncs to Master exactly as if it were yours. There is no ownership check.</td></tr>
+            <tr><td>KPI, DB, Bug Count, any other tab</td><td>Nothing. Ignored entirely.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="callout warn">
+        <span class="tag">Change status on your own tab, or in the dashboard</span>
+        <p>Doing it on Master looks like it worked — the cell changes — but no timer runs and the
+           team tab still shows the old value.</p>
+      </div>
+      <p>The dashboard ignores which tab you are on. It always reads Master and filters by your
+         email, so opening it from someone else's tab still shows your own tasks.</p>
+    </section>
+
+    <section id="admin">
+      <h2><span class="num">07</span>The Admin menu</h2>
+      <p class="lede">Under Tracker Options. These change the sheet for everybody.</p>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>Item</th><th>What it does</th></tr></thead>
+          <tbody>
+            <tr><td class="wrapok">Lock Sheets</td><td>Protects Master completely. On team tabs, leaves only Status, Developer Remark and SVN Committed editable. Refreshes the dropdowns at the same time.</td></tr>
+            <tr><td class="wrapok">Unlock Sheets</td><td>Removes only the protections this script created. Anything you protected by hand is left alone.</td></tr>
+            <tr><td class="wrapok">Refresh Dropdowns</td><td>Re-applies Status, SVN and Assigned validation across every task sheet. Run it after adding or removing someone.</td></tr>
+            <tr><td class="wrapok">Configure Webhook</td><td>Stores the tunnel URL and shared secret in Script Properties — never in the source, so a sheet viewer cannot read them.</td></tr>
+            <tr><td class="wrapok">Send Latest Task to Terminal</td><td>Pushes the newest task ID to your local listener so an IDE session can pick it up.</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="callout stop">
+        <span class="tag">Known gap</span>
+        <p>The menu is visible to everyone who can open the sheet. Anyone can click
+           <strong>Unlock Sheets</strong> and undo the protection, and anyone can edit anyone
+           else's tab. There are no permission checks in the code — access is whatever Google
+           Sheet sharing allows.</p>
+      </div>
+    </section>
+
+    <section id="mcp">
+      <h2><span class="num">08</span>IDE connection</h2>
+      <p class="lede">The tracker exposes a small MCP server so your IDE can read the sheet
+         directly — the next free task number, your open tasks, one task by ID.</p>
+      <p>All three clients read their config <strong>only at startup</strong>. After editing,
+         quit the client fully — closing the window is not enough for Claude Desktop, quit it
+         from the system tray.</p>
+
+      <h3>Antigravity / Gemini</h3>
+      <p><code>C:\Users\venul\.gemini\config\mcp_config.json</code></p>
+      <pre><code>"task-tracker": {
+  "command": "node",
+  "args": ["D:\\OneSapro\\Prathap\\automation\\mcp-server.mjs"]
+}</code></pre>
+
+      <h3>Claude Code</h3>
+      <p><code>.mcp.json</code> at the repo root. Paths are relative and it is gitignored.</p>
+      <pre><code>"task-tracker": {
+  "command": "node",
+  "args": ["automation/mcp-server.mjs"],
+  "env": {
+    "MASTER_SHEET_ID": "1ALlJvT3lUKIYX7eUw0fkQJ2IoDoP8Ytp-trNNKfMkpc",
+    "MASTER_TAB_NAME": "Master"
+  }
+}</code></pre>
+
+      <div class="callout warn">
+        <span class="tag">Numbering</span>
+        <p>The MCP can reserve a block of IDs. The form allocates from the highest number that
+           exists <em>in the sheet</em>, so a reserved-but-unwritten ID will be handed out twice.
+           Write reserved rows promptly, or do not reserve.</p>
+      </div>
+      <p>Full detail, including the smoke test and what to do on another machine, is in
+         <code>automation/RUNBOOK.md</code>.</p>
+    </section>
+
+    <section id="columns">
+      <h2><span class="num">09</span>The 23 columns</h2>
+      <p class="lede">Master's shape. Column order is fixed — the whole sync depends on it.</p>
+      <div class="legend">
+        <span><i class="swatch edit"></i> You fill this</span>
+        <span><i class="swatch lock"></i> System writes it — never type here</span>
+      </div>
+      <div class="cols">
+        <div class="col locked"><span class="n">01</span><span class="nm">Task ID</span></div>
+        <div class="col locked"><span class="n">02</span><span class="nm">Date</span></div>
+        <div class="col you"><span class="n">03</span><span class="nm">Task Summary</span></div>
+        <div class="col you"><span class="n">04</span><span class="nm">Client</span></div>
+        <div class="col you"><span class="n">05</span><span class="nm">Module</span></div>
+        <div class="col you"><span class="n">06</span><span class="nm">Issue Type</span></div>
+        <div class="col locked"><span class="n">07</span><span class="nm">Submitter Email</span></div>
+        <div class="col you"><span class="n">08</span><span class="nm">Assigned Member</span></div>
+        <div class="col locked"><span class="n">09</span><span class="nm">Approx Time (Hrs)</span></div>
+        <div class="col you"><span class="n">10</span><span class="nm">Deadline Date</span></div>
+        <div class="col you"><span class="n">11</span><span class="nm">Deadline Time</span></div>
+        <div class="col locked"><span class="n">12</span><span class="nm">Completed Date</span></div>
+        <div class="col locked"><span class="n">13</span><span class="nm">Completed Time</span></div>
+        <div class="col you"><span class="n">14</span><span class="nm">Status</span></div>
+        <div class="col you"><span class="n">15</span><span class="nm">Planned / Unplanned</span></div>
+        <div class="col you"><span class="n">16</span><span class="nm">Priority</span></div>
+        <div class="col you"><span class="n">17</span><span class="nm">Remarks</span></div>
+        <div class="col you"><span class="n">18</span><span class="nm">Developer Remark</span></div>
+        <div class="col locked"><span class="n">19</span><span class="nm">Start Time</span></div>
+        <div class="col you"><span class="n">20</span><span class="nm">Reporting Client</span></div>
+        <div class="col locked"><span class="n">21</span><span class="nm">Attachments</span></div>
+        <div class="col you"><span class="n">22</span><span class="nm">SVN Committed</span></div>
+        <div class="col locked"><span class="n">23</span><span class="nm">Session Start</span></div>
+      </div>
+      <div class="callout stop">
+        <span class="tag">Column 23 — Session Start</span>
+        <p>This is the live clock. Typing in it, or clearing it while a task is running, loses that
+           session's time permanently. It is locked for a reason.</p>
+      </div>
+      <p>After <strong>Lock Sheets</strong>, only <strong>14</strong>, <strong>18</strong> and
+         <strong>22</strong> stay hand-editable on your own tab. Everything else in the “you fill
+         this” group is set through the form or Bulk Add at creation time.</p>
+    </section>
+
+    <section id="trouble">
+      <h2><span class="num">10</span>When it misbehaves</h2>
+      <div class="table-scroll">
+        <table>
+          <thead><tr><th>Symptom</th><th>Cause</th><th>Fix</th></tr></thead>
+          <tbody>
+            <tr><td class="wrapok">“Only N columns — need at least 15”</td><td>The AI used spaces, not tabs</td><td>Ask it again for real tab characters</td></tr>
+            <tr><td class="wrapok">A dropdown field outlined red</td><td>The AI invented a value</td><td>Pick the right one by hand</td></tr>
+            <tr><td class="wrapok">Task in Master, missing from a tab</td><td>A sync hiccup</td><td>Tracker Options → Sync Recent Tasks</td></tr>
+            <tr><td class="wrapok">A cell will not accept an edit</td><td>It is an automated column</td><td>Use the dashboard instead</td></tr>
+            <tr><td class="wrapok">Status changed but no time logged</td><td>You changed it on Master</td><td>Do it on your own tab or in the dashboard</td></tr>
+            <tr><td class="wrapok">“No valid TASK-&lt;n&gt; id found”</td><td>Column A of Master is damaged</td><td>Stop. Tell Venul before submitting anything</td></tr>
+            <tr><td class="wrapok">Red message on submit</td><td>The task was <strong>not</strong> saved</td><td>Read it, fix it, submit again — your text is still there</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="callout note">
+        <span class="tag">Never reuse a gap</span>
+        <p>Missing numbers in the sequence are deleted tasks. Something somewhere may still
+           reference that ID. Always take the next free number, never fill a hole.</p>
+      </div>
+    </section>
+
+  </main>
+
+  <footer>
+    <span>Task Management Master Log</span>
+    <span>Source of truth · D:\task-tracker\appscript</span>
+    <span><a href="mailto:office.venulm@gmail.com">office.venulm@gmail.com</a></span>
+  </footer>
+
+</div>

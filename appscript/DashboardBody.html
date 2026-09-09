@@ -1,0 +1,374 @@
+<div class="loading-overlay" id="loading">
+  <div class="spinner"></div>
+  <div class="loading-text" id="loading-text">Loading tasks…</div>
+</div>
+<div class="toast" id="toast"></div>
+
+<div class="stats-bar">
+  <div class="stat" id="stat-all"        onclick="filterByStatus('all')">
+    <div class="stat-num" id="count-all">—</div><div class="stat-label">Open</div></div>
+  <div class="stat" id="stat-inprogress" onclick="filterByStatus('In Progress')">
+    <div class="stat-num green" id="count-inprogress">—</div><div class="stat-label">Active</div></div>
+  <div class="stat" id="stat-paused"     onclick="filterByStatus('Paused')">
+    <div class="stat-num orange" id="count-paused">—</div><div class="stat-label">Paused</div></div>
+  <div class="stat" id="stat-overdue"    onclick="filterByStatus('overdue')">
+    <div class="stat-num red" id="count-overdue">—</div><div class="stat-label">Overdue</div></div>
+</div>
+
+<div class="filters">
+  <input type="text" id="search" placeholder="Search task, client or ID…" oninput="applyFilters()">
+  <div class="filter-row">
+    <select id="filter-status" onchange="applyFilters()">
+      <option value="all">All statuses</option>
+      <option value="New">New</option>
+      <option value="In Progress">In Progress</option>
+      <option value="Paused">Paused</option>
+      <option value="Blocked">Blocked</option>
+      <option value="Done">Done</option>
+      <option value="overdue">Overdue</option>
+    </select>
+    <select id="filter-developer" onchange="applyFilters()" style="display:none">
+      <option value="all">Everyone</option>
+    </select>
+  </div>
+  <div class="filter-foot">
+    <label class="tick">
+      <input type="checkbox" id="include-finished" onchange="loadTasks()">
+      <span>Include old finished</span>
+    </label>
+    <a id="open-full" class="open-full" href="#" target="_blank" rel="noopener" hidden>Open full page &#8599;</a>
+  </div>
+</div>
+
+<div class="bulk-bar" id="bulk-bar">
+  <span id="bulk-count">0 selected</span>
+  <div class="bulk-actions">
+    <button class="bulk-btn start"  onclick="bulkAction('In Progress')">Start</button>
+    <button class="bulk-btn pause"  onclick="bulkAction('Paused')">Pause</button>
+    <button class="bulk-btn done"   onclick="bulkAction('Done')">Done</button>
+    <button class="bulk-btn cancel" onclick="clearSelection()">✕</button>
+  </div>
+</div>
+
+<div id="notice-slot"></div>
+<div class="task-list" id="task-list"><div class="no-tasks">Loading…</div></div>
+
+<script>
+var allTasks = [];
+var isManager = false;
+var selectedIds = {};
+var liveTimer = null;
+
+function el(id) { return document.getElementById(id); }
+
+// ---------------------------------------------------------------------------
+// LOAD
+// ---------------------------------------------------------------------------
+function loadTasks() {
+  showLoading('Loading tasks…');
+  // Server-side window: open work always, finished work only if asked for.
+  // Without it a manager pulls every row Master has ever held.
+  var opts = { includeFinished: el('include-finished').checked };
+  google.script.run
+    .withSuccessHandler(onTasksLoaded)
+    .withFailureHandler(function (err) { hideLoading(); showToast('Error: ' + err.message, 'error'); })
+    .getSidebarTasks(opts);
+}
+
+function onTasksLoaded(result) {
+  allTasks = result.tasks || [];
+  isManager = !!result.isManager;
+
+  var link = el('open-full');
+  if (result.webAppUrl) {
+    link.href = result.webAppUrl + '?page=mytasks';
+    link.hidden = false;
+  }
+
+  var slot = el('notice-slot');
+  slot.innerHTML = '';
+  if (result.notice) {
+    var n = document.createElement('div');
+    n.className = 'notice';
+    n.textContent = result.notice;
+    slot.appendChild(n);
+  }
+  if (result.omittedOld) {
+    var o = document.createElement('div');
+    o.className = 'notice muted';
+    o.textContent = result.omittedOld + ' finished or older task(s) hidden. ' +
+                    'Tick "Include old finished" to load them.';
+    slot.appendChild(o);
+  }
+
+  var devFilter = el('filter-developer');
+  if (isManager && devFilter.options.length <= 1) {
+    devFilter.style.display = '';
+    (result.devNames || []).forEach(function (name) {
+      var o = document.createElement('option');
+      o.value = name; o.textContent = name;
+      devFilter.appendChild(o);
+    });
+  }
+
+  updateStats();
+  applyFilters();
+  hideLoading();
+  startLiveTicker();
+}
+
+function updateStats() {
+  function n(fn) { return allTasks.filter(fn).length; }
+  el('count-all').textContent        = n(function (t) { return t.status !== 'Done'; });
+  el('count-inprogress').textContent = n(function (t) { return t.status === 'In Progress'; });
+  el('count-paused').textContent     = n(function (t) { return t.status === 'Paused'; });
+  el('count-overdue').textContent    = n(function (t) { return t.isOverdue; });
+}
+
+// ---------------------------------------------------------------------------
+// FILTER
+// ---------------------------------------------------------------------------
+function applyFilters() {
+  var q      = el('search').value.toLowerCase();
+  var status = el('filter-status').value;
+  var dev    = el('filter-developer').value;
+
+  var list = allTasks.filter(function (t) {
+    if (q && t.summary.toLowerCase().indexOf(q) === -1 &&
+             t.client.toLowerCase().indexOf(q)  === -1 &&
+             t.taskId.toLowerCase().indexOf(q)  === -1) return false;
+    if (status === 'overdue') { if (!t.isOverdue) return false; }
+    else if (status && status !== 'all' && t.status !== status) return false;
+    if (dev && dev !== 'all' && t.assignedMember !== dev) return false;
+    return true;
+  });
+
+  renderTasks(list);
+}
+
+function filterByStatus(status) {
+  el('filter-status').value = status;
+  ['all', 'inprogress', 'paused', 'overdue'].forEach(function (s) {
+    el('stat-' + s).classList.remove('active');
+  });
+  var map = { 'all': 'all', 'In Progress': 'inprogress', 'Paused': 'paused', 'overdue': 'overdue' };
+  if (map[status]) el('stat-' + map[status]).classList.add('active');
+  applyFilters();
+}
+
+// ---------------------------------------------------------------------------
+// RENDER — DOM nodes, not innerHTML. A summary containing a quote or an angle
+// bracket used to break the card layout outright.
+// ---------------------------------------------------------------------------
+function span(cls, text) {
+  var s = document.createElement('span');
+  if (cls) s.className = cls;
+  if (text != null) s.textContent = text;
+  return s;
+}
+
+function fmtHours(h) {
+  if (!h || h <= 0) return '—';
+  return Math.floor(h) + 'h ' + Math.round((h % 1) * 60) + 'm';
+}
+
+/**
+ * Apps Script does not reliably preserve null across google.script.run — a null
+ * can arrive as undefined. Checking `=== null` therefore misses, and the old
+ * code divided undefined and rendered "NaNd left". Test for a real number.
+ */
+function isNum(v) { return typeof v === 'number' && isFinite(v); }
+
+function deadlineChip(t) {
+  if (!t.deadlineStr) return null;
+
+  // Under an hour, report minutes. Flooring to whole hours showed "0h over"
+  // on a task forty minutes late, which reads as a bug.
+  function span_(h) {
+    if (h < 1)  return Math.max(1, Math.round(h * 60)) + 'm';
+    if (h < 24) return Math.floor(h) + 'h';
+    var d = Math.floor(h / 24), rem = Math.floor(h % 24);
+    return rem ? d + 'd ' + rem + 'h' : d + 'd';
+  }
+
+  if (t.isOverdue && isNum(t.hoursOvertime)) {
+    return span('chip overdue', span_(t.hoursOvertime) + ' over');
+  }
+  if (!isNum(t.hoursRemaining)) return null;
+
+  var r = t.hoursRemaining;
+  return span('chip ' + (r < 4 ? 'urgent' : 'ok'), span_(r) + ' left');
+}
+
+function actionButton(label, cls, taskId, status, disabled) {
+  var b = document.createElement('button');
+  b.className = 'action-btn ' + cls;
+  b.textContent = label;
+  b.disabled = disabled;
+  b.onclick = function () { updateStatus(taskId, status, b); };
+  return b;
+}
+
+var RENDER_CAP = 150;
+
+function renderTasks(tasks) {
+  var list = el('task-list');
+  list.innerHTML = '';
+
+  if (!tasks.length) {
+    list.appendChild(span('no-tasks', 'No tasks match.'));
+    return;
+  }
+
+  // Each card is ~15 nodes. Rendering thousands into a 420px iframe stalls it.
+  var total = tasks.length;
+  var shown = tasks.slice(0, RENDER_CAP);
+
+  shown.forEach(function (t) {
+    var statusClass = t.status.toLowerCase().replace(/\s+/g, '-');
+    var card = document.createElement('div');
+    card.className = 'task-card status-' + statusClass + (t.isOverdue ? ' overdue' : '');
+    card.dataset.taskId = t.taskId;
+    if (selectedIds[t.taskId]) card.classList.add('selected');
+
+    // top
+    var top = document.createElement('div'); top.className = 'card-top';
+    var chk = document.createElement('input');
+    chk.type = 'checkbox'; chk.className = 'card-checkbox';
+    chk.checked = !!selectedIds[t.taskId];
+    chk.onchange = function () { onCheckChange(chk.checked, t.taskId, card); };
+    var main = document.createElement('div'); main.className = 'card-main';
+    main.appendChild(span('card-id', t.taskId + ' · ' + t.date));
+    var sum = span('card-summary', t.summary);
+    sum.title = t.summary;
+    main.appendChild(sum);
+    main.appendChild(span('card-client', t.client + (t.module ? ' · ' + t.module : '')));
+    top.appendChild(chk); top.appendChild(main);
+
+    // meta
+    var meta = document.createElement('div'); meta.className = 'card-meta';
+    meta.appendChild(span('badge badge-' + statusClass,
+      t.status === 'In Progress' ? 'Active' : t.status));
+    if (t.priority) meta.appendChild(span('badge badge-' + t.priority.toLowerCase(), t.priority));
+    if (isManager) meta.appendChild(span('assigned-chip', t.assignedMember));
+    var dl = deadlineChip(t); if (dl) meta.appendChild(dl);
+    var time = span('time-chip' + (t.isLive ? ' live' : ''),
+                    (t.isLive ? '● ' : '') + fmtHours(t.timeSpentHrs));
+    time.dataset.baseHours = t.timeSpentHrs;
+    time.dataset.live = t.isLive ? '1' : '0';
+    meta.appendChild(time);
+
+    // actions
+    var actions = document.createElement('div'); actions.className = 'card-actions';
+    actions.appendChild(actionButton('Start', 'btn-start', t.taskId, 'In Progress',
+      t.status === 'In Progress' || t.status === 'Done'));
+    actions.appendChild(actionButton('Pause', 'btn-pause', t.taskId, 'Paused',
+      t.status !== 'In Progress'));
+    actions.appendChild(actionButton('Done', 'btn-done', t.taskId, 'Done',
+      t.status === 'Done'));
+
+    card.appendChild(top); card.appendChild(meta); card.appendChild(actions);
+    list.appendChild(card);
+  });
+
+  if (total > RENDER_CAP) {
+    list.appendChild(span('no-tasks',
+      'Showing ' + RENDER_CAP + ' of ' + total + '. Use search or the filters to narrow it down.'));
+  }
+}
+
+/** Running timers advance in the browser instead of sitting frozen until a refresh. */
+function startLiveTicker() {
+  if (liveTimer) clearInterval(liveTimer);
+  liveTimer = setInterval(function () {
+    document.querySelectorAll('.time-chip[data-live="1"]').forEach(function (chip) {
+      var base = parseFloat(chip.dataset.baseHours) || 0;
+      chip.dataset.baseHours = base + (1 / 120);   // 30s tick
+      chip.textContent = '● ' + fmtHours(base + (1 / 120));
+    });
+  }, 30000);
+}
+
+// ---------------------------------------------------------------------------
+// STATUS UPDATES
+// ---------------------------------------------------------------------------
+function updateStatus(taskId, newStatus, btn) {
+  btn.disabled = true;
+  showLoading(taskId + ' → ' + newStatus + '…');
+
+  google.script.run
+    .withSuccessHandler(function (res) {
+      hideLoading();
+      if (res && res.success) { showToast(taskId + ' → ' + newStatus, 'success'); loadTasks(); }
+      else { showToast((res && res.error) || 'Update failed', 'error'); btn.disabled = false; }
+    })
+    .withFailureHandler(function (err) {
+      hideLoading(); showToast('Error: ' + err.message, 'error'); btn.disabled = false;
+    })
+    .updateStatusFromSidebar(taskId, newStatus);
+}
+
+// ---------------------------------------------------------------------------
+// BULK
+// ---------------------------------------------------------------------------
+function onCheckChange(checked, taskId, card) {
+  if (checked) { selectedIds[taskId] = true; card.classList.add('selected'); }
+  else { delete selectedIds[taskId]; card.classList.remove('selected'); }
+  updateBulkBar();
+}
+
+function selectedList() { return Object.keys(selectedIds); }
+
+function updateBulkBar() {
+  var n = selectedList().length;
+  el('bulk-bar').classList.toggle('visible', n > 0);
+  el('bulk-count').textContent = n + ' selected';
+}
+
+function clearSelection() {
+  selectedIds = {};
+  document.querySelectorAll('.card-checkbox').forEach(function (c) { c.checked = false; });
+  document.querySelectorAll('.task-card').forEach(function (c) { c.classList.remove('selected'); });
+  updateBulkBar();
+}
+
+function bulkAction(newStatus) {
+  var ids = selectedList();
+  if (!ids.length) return;
+  showLoading('Updating ' + ids.length + ' task(s)…');
+
+  google.script.run
+    .withSuccessHandler(function (res) {
+      hideLoading();
+      if (!res || !res.success) { showToast((res && res.error) || 'Bulk update failed', 'error'); return; }
+      var msg = 'Updated ' + res.updated + ' → ' + newStatus;
+      if (res.failed) msg += ' · ' + res.failed + ' failed';
+      showToast(msg, res.failed ? 'error' : 'success');
+      if (res.errors && res.errors.length) console.log('Bulk errors:', res.errors);
+      clearSelection();
+      loadTasks();
+    })
+    .withFailureHandler(function (err) { hideLoading(); showToast('Error: ' + err.message, 'error'); })
+    .bulkUpdateStatusFromSidebar(ids, newStatus);
+}
+
+// ---------------------------------------------------------------------------
+// UI HELPERS
+// ---------------------------------------------------------------------------
+function showLoading(text) {
+  el('loading-text').textContent = text || 'Loading…';
+  el('loading').classList.add('visible');
+}
+function hideLoading() { el('loading').classList.remove('visible'); }
+
+var toastTimer = null;
+function showToast(msg, type) {
+  var t = el('toast');
+  t.textContent = msg;
+  t.className = 'toast show ' + (type || '');
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(function () { t.className = 'toast'; }, 3500);
+}
+
+loadTasks();
+</script>

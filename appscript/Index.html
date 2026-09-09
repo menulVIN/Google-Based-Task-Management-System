@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+<html>
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<style>
+  :root {
+    --primary: #76B900;
+    --primary-dark: #5B9000;
+    --secondary: #333;
+    --bg: #f8f8f8;
+    --section-bg: #F0F8EC;
+    --danger: #c0392b;
+  }
+  * { box-sizing: border-box; }
+  body { font-family: Arial, sans-serif; background: var(--bg); margin: 0; padding: 20px; }
+  .container { max-width: 760px; margin: auto; background: #fff; padding: 30px;
+               border-radius: 10px; box-shadow: 0 4px 12px rgba(0,0,0,.15); }
+  .logo-container { text-align: center; margin-bottom: 20px; }
+  .logo-container img { max-height: 70px; }
+
+  h1 { color: var(--secondary); border-bottom: 2px solid var(--primary);
+       padding-bottom: 10px; margin: 0 0 6px; text-align: center; font-size: 23px; }
+  .byline { display: flex; justify-content: center; align-items: center; gap: 18px;
+            flex-wrap: wrap; font-size: 12px; color: #888; margin-bottom: 18px; }
+  .byline a { color: var(--primary-dark); }
+  .nav-link { font-weight: 600; text-decoration: none; padding: 4px 10px;
+              border: 1px solid #d7e3c6; border-radius: 5px; background: var(--section-bg); }
+  .nav-link:hover { background: #e4f0d6; }
+
+  label { display: block; margin-bottom: 5px; font-weight: bold; color: var(--secondary); }
+  /* Only genuinely required fields get the asterisk. */
+  label.required::after { content: " *"; color: var(--danger); }
+
+  input[type=text], input[type=date], input[type=time], select, textarea {
+    width: 100%; padding: 10px; margin-bottom: 15px; border: 1px solid #ccc;
+    border-radius: 5px; transition: border-color .2s; font-family: inherit; font-size: 14px;
+  }
+  input:focus, select:focus, textarea:focus {
+    border-color: var(--primary); outline: none; box-shadow: 0 0 5px rgba(118,185,0,.5);
+  }
+  textarea { resize: vertical; min-height: 90px; }
+
+  .section-header { background: var(--section-bg); color: var(--secondary);
+    padding: 10px 15px; margin: 25px 0 15px; border-radius: 5px;
+    font-weight: bold; border-left: 5px solid var(--primary); }
+
+  .form-row { display: flex; gap: 20px; }
+  .form-col { flex: 1; min-width: 0; }
+  @media (max-width: 620px) { .form-row { flex-direction: column; gap: 0; } }
+
+  .submit-button { background: var(--primary); color: #fff; padding: 13px 25px;
+    border: none; border-radius: 5px; cursor: pointer; font-size: 16px;
+    margin-top: 20px; width: 100%; font-weight: bold; }
+  .submit-button:hover:not(:disabled) { background: var(--primary-dark); }
+  .submit-button:disabled { opacity: .55; cursor: not-allowed; }
+
+  #loading { display: none; text-align: center; margin-top: 20px; color: var(--primary-dark); font-weight: bold; }
+  #responseMessage { display: none; text-align: center; margin-top: 20px; padding: 15px;
+                     border-radius: 5px; white-space: pre-line; }
+  .success { background: var(--section-bg); color: var(--primary-dark); border: 1px solid var(--primary); }
+  .error   { background: #fcebeb; color: var(--danger); border: 1px solid var(--danger); }
+
+  #drop-zone { border: 2px dashed #ccc; border-radius: 5px; padding: 20px; text-align: center;
+               color: #666; margin-bottom: 15px; cursor: pointer; transition: .2s; }
+  #drop-zone.dragover { border-color: var(--primary); background: var(--section-bg); color: var(--primary-dark); }
+  .file-item { display: flex; justify-content: space-between; align-items: center;
+               background: #f1f1f1; padding: 8px; margin-bottom: 5px; border-radius: 4px; font-size: 13px; }
+  .remove-file { color: var(--danger); cursor: pointer; font-weight: bold; margin-left: 10px; }
+
+  /* Auto-fill panel */
+  #toggleAutoFill { font-size: 12px; color: #bbb; cursor: pointer; user-select: none; }
+  #toggleAutoFill:hover { color: var(--primary); }
+  #autoFillContainer { display: none; margin-bottom: 20px; padding: 15px; background: #f8f9fa;
+                       border: 1px solid #dee2e6; border-radius: 6px; }
+  #quickFill { font-family: Consolas, Monaco, monospace; font-size: 12px; height: auto;
+               min-height: 70px; border: 1px dashed #adb5bd; margin-bottom: 10px; white-space: pre; }
+  .af-buttons { display: flex; gap: 10px; justify-content: flex-end; }
+  .af-btn { border-radius: 4px; padding: 7px 13px; font-size: 12px; cursor: pointer; }
+  .af-prompt { background: #e3f2fd; border: 1px solid #90caf9; color: #1976d2; }
+  .af-clear  { background: #ffebee; border: 1px solid #ef9a9a; color: #c62828; }
+  #autoFillFeedback { display: none; font-size: 12px; margin-top: 10px; padding: 9px;
+                      border-radius: 4px; white-space: pre-line; }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <div class="logo-container">
+    <img src="https://onesapro.com/wp-content/uploads/2024/06/OneSapro-Logo-2-02-400x234.png" alt="Logo">
+  </div>
+
+  <h1>New Development Task Request</h1>
+  <div class="byline">
+    <a href="?page=mytasks" class="nav-link">&#8592; My Tasks</a>
+    <span>Support: <a href="mailto:office.venulm@gmail.com">office.venulm@gmail.com</a></span>
+  </div>
+
+  <form id="taskForm">
+
+    <div style="text-align:right; margin-bottom:10px;">
+      <span id="toggleAutoFill">⚡ Auto-fill from AI</span>
+    </div>
+
+    <div id="autoFillContainer">
+      <textarea id="quickFill" rows="3" placeholder="Paste the tab-separated row from your AI here (Ctrl+V)…"></textarea>
+      <div class="af-buttons">
+        <button type="button" id="copyAiPromptBtn" class="af-btn af-prompt">Copy AI Prompt</button>
+        <button type="button" id="clearFormBtn"    class="af-btn af-clear">Clear Form</button>
+      </div>
+      <div id="autoFillFeedback"></div>
+    </div>
+
+    <div class="section-header">Task Identity</div>
+    <div class="form-row">
+      <div class="form-col">
+        <label class="required" for="reporter">Reported By</label>
+        <input type="text" id="reporter" name="reporter" required placeholder="Who raised this">
+      </div>
+      <div class="form-col">
+        <label class="required" for="client">Client / Project</label>
+        <input list="client-list" type="text" id="client" name="client" required placeholder="Type or select…">
+        <datalist id="client-list">
+          <option value="447 Restaurant"></option><option value="Agri FLI Restaurant"></option>
+          <option value="Amor Beach Unawatuna"></option><option value="Arangala Forest Lodge"></option>
+          <option value="Atha Resort"></option><option value="Avasta Resort"></option>
+          <option value="Bloomfield Athletic Club"></option><option value="Bodyline"></option>
+          <option value="Canal View Garden"></option><option value="Chimneys NE"></option>
+          <option value="Cinnamon Village Sinharaja"></option><option value="Closenberg Hotel"></option>
+          <option value="Curry Pot Clifford Avenue"></option><option value="Curry Pot Lotus Tower"></option>
+          <option value="Curry Pot Marine Drive"></option><option value="Curry Pot RMV"></option>
+          <option value="Curry Pot Sampath Bank"></option><option value="Customized Solutions"></option>
+          <option value="Dutch Lanka"></option><option value="Earls Red Kurunegala"></option>
+          <option value="Earls Red Passikudah"></option><option value="Earl's Laundry"></option>
+          <option value="Elephas"></option><option value="Elements Beach Resort"></option>
+          <option value="EPIC Aura"></option><option value="Epic Leisure"></option>
+          <option value="EPIC Warehouse"></option><option value="Finance Project"></option>
+          <option value="Flute masion"></option><option value="Galle Services Hub"></option>
+          <option value="General"></option><option value="Heaven Seven kandy"></option>
+          <option value="Heaven Seven NE"></option><option value="Heenatigala Walawwa"></option>
+          <option value="Hotel Ganthera"></option><option value="Hotel Glendower"></option>
+          <option value="Hotel Randiya Anuradhapura"></option><option value="Indra Manel Resort"></option>
+          <option value="Insee"></option><option value="Ivory Resort"></option>
+          <option value="Jungle Village"></option><option value="Kandegedara"></option>
+          <option value="Kitchen House"></option><option value="Lakeside Nuwarawewa"></option>
+          <option value="Mahaweli Reach Asiri Outlet"></option><option value="Mahaweli Reach Hotel"></option>
+          <option value="Mahaweli Reach KCC Outlet"></option><option value="Mahaweli Reach Nihal Super Outlet"></option>
+          <option value="Monaara Resort"></option><option value="Morawaka Grocery"></option>
+          <option value="Mount Marina Villas"></option><option value="Nest Restaurant"></option>
+          <option value="Niriella Motors"></option><option value="Olanro Hotel Negombo"></option>
+          <option value="Orient"></option><option value="Ovinmo"></option>
+          <option value="Ovinmo River Side"></option><option value="PalmScape"></option>
+          <option value="Pathirana Super"></option><option value="Pedro Barn"></option>
+          <option value="POS EE Web"></option><option value="Prathap Valuers"></option>
+          <option value="Regent Cafe Borella"></option><option value="Regent Caterers"></option>
+          <option value="Regent Country Club Grand"></option><option value="Regent Country Club Havelock"></option>
+          <option value="Regent Country Club Malabe"></option><option value="Roof Mart"></option>
+          <option value="Royal Rock"></option><option value="Sahana Beligaha"></option>
+          <option value="Sahana Galle"></option><option value="Sahana Karapitiya"></option>
+          <option value="Sahana Magalle"></option><option value="Sanctuary at Tissawewa"></option>
+          <option value="Serene lake View Resort"></option><option value="Ship2500"></option>
+          <option value="Sinharaja Forest Gate"></option><option value="SkyGate"></option>
+          <option value="Somerset Mirissa Beach"></option><option value="Somerset Mirissa Blue"></option>
+          <option value="Sri Gemunu"></option><option value="Sun Ray Passikudah"></option>
+          <option value="Task Management Application"></option><option value="The Chariot Hikkaduwa"></option>
+          <option value="The Cloud Hanthana"></option><option value="The Lady Hill"></option>
+          <option value="Victoria"></option><option value="Villa Sommet"></option>
+          <option value="Waasala Leisure"></option><option value="WB Villa"></option>
+          <option value="Wisdom Habarana"></option><option value="Other"></option>
+        </datalist>
+      </div>
+    </div>
+
+    <label class="required" for="taskSummary">Task Title / Summary</label>
+    <input type="text" id="taskSummary" name="taskSummary" required maxlength="120"
+           placeholder="e.g. IBE booking confirmation email missing price">
+
+    <label class="required" for="remarks">Detailed Description &amp; Steps to Reproduce</label>
+    <textarea id="remarks" name="remarks" required placeholder="Steps: 1. Go to IBE…"></textarea>
+
+    <label for="developerRemarks">Developer Remarks (technical detail — optional)</label>
+    <textarea id="developerRemarks" name="developerRemarks"
+              placeholder="Files, tables, endpoints, functions touched. Filled automatically by the AI auto-fill."></textarea>
+
+    <label>Attachments (drag &amp; drop or click)</label>
+    <div id="drop-zone">
+      <p>Drag &amp; drop files here (images, PDFs)<br>or click to select — max 5&nbsp;MB each</p>
+      <input type="file" id="fileInput" multiple style="display:none">
+    </div>
+    <div id="file-list"></div>
+
+    <label for="paste-area">Additional Links / Pasted Screenshots</label>
+    <div id="paste-area" contenteditable="true"
+         style="min-height:80px; padding:10px; margin-bottom:15px; border:1px solid #ccc;
+                border-radius:5px; background:#fff; overflow:auto;"></div>
+
+    <div class="section-header">Classification &amp; Urgency</div>
+    <div class="form-row">
+      <div class="form-col">
+        <label class="required" for="issueType">Issue Type</label>
+        <select id="issueType" name="issueType" required><option value="">-- Select --</option></select>
+      </div>
+      <div class="form-col">
+        <label class="required" for="module">Module Affected</label>
+        <select id="module" name="module" required><option value="">-- Select --</option></select>
+      </div>
+    </div>
+
+    <div class="form-row">
+      <div class="form-col">
+        <label class="required" for="priorityStatus">Priority</label>
+        <select id="priorityStatus" name="priorityStatus" required><option value="">-- Select --</option></select>
+      </div>
+      <div class="form-col">
+        <label class="required" for="plannedUnplanned">Planned or Unplanned?</label>
+        <select id="plannedUnplanned" name="plannedUnplanned" required><option value="">-- Select --</option></select>
+      </div>
+    </div>
+
+    <div class="section-header">Assignment &amp; Deadline</div>
+    <div class="form-row">
+      <div class="form-col">
+        <label class="required" for="assignedMember">Assign To</label>
+        <select id="assignedMember" name="assignedMember" required><option value="">-- Select --</option></select>
+      </div>
+      <div class="form-col">
+        <label class="required" for="deadlineDate">Deadline Date</label>
+        <input type="date" id="deadlineDate" name="deadlineDate" required>
+      </div>
+      <div class="form-col">
+        <label for="deadlineTime">Deadline Time (optional)</label>
+        <input type="time" id="deadlineTime" name="deadlineTime">
+      </div>
+    </div>
+
+    <button type="submit" class="submit-button" id="submitBtn">Submit Task Request</button>
+  </form>
+
+  <div id="loading">Submitting task… please wait.</div>
+  <div id="responseMessage"></div>
+</div>
+
+<script>
+// ---------------------------------------------------------------------------
+// CONFIG — dropdowns come from Code.gs so the lists live in exactly one place
+// ---------------------------------------------------------------------------
+var CONFIG = null;
+
+/**
+ * items are {v, l}: v is what gets stored in the sheet, l is what people read.
+ * Showing v in both places turned the dropdowns into internal codes.
+ */
+function fillSelect(id, items) {
+  var el = document.getElementById(id);
+  items.forEach(function (it) {
+    var o = document.createElement('option');
+    o.value = it.v;
+    o.textContent = it.l;
+    el.appendChild(o);
+  });
+}
+
+google.script.run.withSuccessHandler(function (cfg) {
+  CONFIG = cfg;
+  fillSelect('module', cfg.modules);
+  fillSelect('issueType', cfg.issueTypes);
+  fillSelect('priorityStatus', cfg.priorities);
+  fillSelect('plannedUnplanned', cfg.planned);
+  fillSelect('assignedMember', cfg.developers);
+  restoreRemembered();
+}).withFailureHandler(function (err) {
+  showResponse('Could not load form options: ' + err.message, 'error');
+}).getFormConfig();
+
+// ---------------------------------------------------------------------------
+// ATTACHMENTS
+// ---------------------------------------------------------------------------
+var uploadedFiles = [];
+var pendingReads  = 0;
+
+var dropZone  = document.getElementById('drop-zone');
+var fileInput = document.getElementById('fileInput');
+
+dropZone.addEventListener('click', function () { fileInput.click(); });
+dropZone.addEventListener('dragover', function (e) { e.preventDefault(); dropZone.classList.add('dragover'); });
+dropZone.addEventListener('dragleave', function () { dropZone.classList.remove('dragover'); });
+dropZone.addEventListener('drop', function (e) {
+  e.preventDefault(); dropZone.classList.remove('dragover'); handleFiles(e.dataTransfer.files);
+});
+fileInput.addEventListener('change', function (e) { handleFiles(e.target.files); });
+
+/**
+ * FileReader is async. pendingReads keeps the submit button disabled until
+ * every file has finished encoding — otherwise a fast submit sends a short list.
+ */
+function handleFiles(files) {
+  for (var i = 0; i < files.length; i++) {
+    var file = files[i];
+    if (file.size > 5 * 1024 * 1024) { alert(file.name + ' is larger than 5 MB and was skipped.'); continue; }
+
+    pendingReads++;
+    updateSubmitState();
+
+    (function (f) {
+      var reader = new FileReader();
+      reader.onload = function (ev) {
+        uploadedFiles.push({ name: f.name, type: f.type, data: ev.target.result });
+        pendingReads--; renderFileList(); updateSubmitState();
+      };
+      reader.onerror = function () {
+        alert('Could not read ' + f.name);
+        pendingReads--; updateSubmitState();
+      };
+      reader.readAsDataURL(f);
+    })(file);
+  }
+  fileInput.value = '';
+}
+
+function renderFileList() {
+  var list = document.getElementById('file-list');
+  list.innerHTML = '';
+  uploadedFiles.forEach(function (file, index) {
+    var div = document.createElement('div');
+    div.className = 'file-item';
+    var name = document.createElement('span');
+    name.textContent = '📎 ' + file.name;          // textContent, never innerHTML
+    var x = document.createElement('span');
+    x.className = 'remove-file'; x.textContent = '✕';
+    x.onclick = function () { uploadedFiles.splice(index, 1); renderFileList(); };
+    div.appendChild(name); div.appendChild(x);
+    list.appendChild(div);
+  });
+}
+
+function updateSubmitState() {
+  var btn = document.getElementById('submitBtn');
+  btn.disabled = pendingReads > 0;
+  btn.textContent = pendingReads > 0
+    ? 'Reading ' + pendingReads + ' attachment(s)…'
+    : 'Submit Task Request';
+}
+
+// ---------------------------------------------------------------------------
+// SUBMIT
+// ---------------------------------------------------------------------------
+document.getElementById('taskForm').addEventListener('submit', function (e) {
+  e.preventDefault();
+  if (pendingReads > 0) return;
+
+  var data = {};
+  new FormData(e.target).forEach(function (v, k) { data[k] = v; });
+
+  var pasteArea = document.getElementById('paste-area');
+  data.pastedImages = Array.prototype.slice.call(pasteArea.querySelectorAll('img'))
+    .map(function (img) { return img.getAttribute('src'); })
+    .filter(function (src) { return src && src.indexOf('data:image/') === 0; });
+  data.droppedFiles   = uploadedFiles;
+  data.attachmentText = pasteArea.innerText || '';
+
+  document.getElementById('loading').style.display = 'block';
+  document.getElementById('responseMessage').style.display = 'none';
+  e.target.style.display = 'none';
+
+  google.script.run.withSuccessHandler(onSubmitResult)
+                   .withFailureHandler(onSubmitFailure)
+                   .handleImageSubmission(data);
+});
+
+/**
+ * The server returns {success, taskId | error}. It used to return a bare string,
+ * so every failure arrived here and was reported to the user as a success while
+ * the form reset and threw away what they had typed.
+ */
+function onSubmitResult(result) {
+  document.getElementById('loading').style.display = 'none';
+  var form = document.getElementById('taskForm');
+  form.style.display = 'block';
+
+  if (!result || !result.success) {
+    showResponse('Task NOT saved: ' + ((result && result.error) || 'unknown error') +
+                 '\nYour entries are still on the form. Fix the problem and submit again.', 'error');
+    return;
+  }
+
+  showResponse('Task submitted — ' + result.taskId +
+               (result.warning ? '\n' + result.warning : ''), 'success');
+  form.reset();
+  document.getElementById('paste-area').innerHTML = '';
+  uploadedFiles = [];
+  renderFileList();
+  clearHighlights();
+  restoreRemembered();
+}
+
+function onSubmitFailure(error) {
+  document.getElementById('loading').style.display = 'none';
+  document.getElementById('taskForm').style.display = 'block';
+  showResponse('Task NOT saved: ' + error.message +
+               '\nYour entries are still on the form.', 'error');
+}
+
+function showResponse(msg, type) {
+  var el = document.getElementById('responseMessage');
+  el.textContent = msg;
+  el.className = type;
+  el.style.display = 'block';
+}
+
+// ---------------------------------------------------------------------------
+// AUTO-FILL
+// ---------------------------------------------------------------------------
+document.getElementById('toggleAutoFill').addEventListener('click', function () {
+  var box = document.getElementById('autoFillContainer');
+  var open = box.style.display === 'block';
+  box.style.display = open ? 'none' : 'block';
+  this.style.color = open ? '#bbb' : 'var(--primary)';
+  if (!open) document.getElementById('quickFill').focus();
+});
+
+document.getElementById('clearFormBtn').addEventListener('click', function () {
+  document.getElementById('taskForm').reset();
+  document.getElementById('paste-area').innerHTML = '';
+  document.getElementById('quickFill').value = '';
+  uploadedFiles = []; renderFileList();
+  clearHighlights();
+  showFeedback('Form cleared.', 'success');
+  restoreRemembered();
+});
+
+function clearHighlights() {
+  document.querySelectorAll('#taskForm input, #taskForm select, #taskForm textarea')
+          .forEach(function (el) { el.style.borderColor = '#ccc'; });
+}
+
+/**
+ * Bound to `paste`, not `input`. clipboardData carries the raw text with its
+ * tabs and newlines intact; an `input` handler on a single-line field fired on
+ * every keystroke and never saw a newline at all.
+ */
+document.getElementById('quickFill').addEventListener('paste', function (e) {
+  e.preventDefault();
+  var raw = (e.clipboardData || window.clipboardData).getData('text');
+  this.value = raw;
+  applyAutoFill(raw);
+});
+
+function pad2(n) { return String(n).padStart(2, '0'); }
+
+/** Local components only. toISOString() shifts UTC+5:30 back a day. */
+function toIsoDateLocal(d) {
+  return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
+}
+
+function parseDeadlineDate(s) {
+  s = String(s).trim();
+  var m = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);            // yyyy-mm-dd
+  if (m) return new Date(+m[1], +m[2] - 1, +m[3]);
+  m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);              // mm/dd/yyyy
+  if (m) return new Date(+m[3], +m[1] - 1, +m[2]);
+  var d = new Date(s);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+function applyAutoFill(val) {
+  if (!val || !val.trim()) return;
+
+  val = val.replace(/^```[a-z]*\r?\n/i, '').replace(/\r?\n```\s*$/, '')
+           .replace(/^["']|["']$/g, '');
+  clearHighlights();
+
+  var lines = val.split(/\r?\n/).filter(function (l) { return l.trim().length > 0; });
+  if (/^\s*task\s*id\b/i.test(lines[0]) && lines.length > 1) lines.shift();
+  var parts = lines[lines.length - 1].split('\t');
+  var warnings = [];
+
+  if (parts.length < 15) {
+    showFeedback('Invalid format — got ' + parts.length + ' columns, need at least 15.\n' +
+                 'Check the AI used real tabs, not spaces. Your paste is still in the box.', 'error');
+    return;   // the box is NOT cleared, so you can see what actually arrived
+  }
+
+  function setInput(id, i) {
+    var el = document.getElementById(id);
+    if (el && parts[i] && parts[i].trim()) {
+      el.value = parts[i].trim();
+      el.style.borderColor = 'var(--primary)';
+    }
+  }
+  function setSelect(id, i) {
+    var el = document.getElementById(id);
+    if (!el || !parts[i] || !parts[i].trim()) return;
+    var v = parts[i].trim();
+    var match = Array.prototype.slice.call(el.options).filter(function (o) {
+      return o.value.toLowerCase() === v.toLowerCase();
+    })[0];
+    if (match) { el.value = match.value; el.style.borderColor = 'var(--primary)'; }
+    else { el.style.borderColor = '#c0392b'; warnings.push('"' + v + '" is not a valid ' + id + '.'); }
+  }
+
+  setInput('taskSummary', 2);
+  setInput('client', 3);
+  setSelect('module', 4);
+  setSelect('issueType', 5);
+  setSelect('assignedMember', 7);
+  setSelect('plannedUnplanned', 14);
+  setSelect('priorityStatus', 15);
+  setInput('remarks', 16);
+  setInput('developerRemarks', 17);   // column 18 — was silently discarded before
+  setInput('reporter', 19);
+
+  var blankish = /^(blank|n\/a|none|-)$/i;
+
+  if (parts[9] && parts[9].trim() && !blankish.test(parts[9].trim())) {
+    var d = parseDeadlineDate(parts[9]);
+    var el = document.getElementById('deadlineDate');
+    if (d) { el.value = toIsoDateLocal(d); el.style.borderColor = 'var(--primary)'; }
+    else { el.style.borderColor = '#c0392b'; warnings.push('Deadline date not understood: "' + parts[9].trim() + '".'); }
+  }
+
+  if (parts[10] && parts[10].trim() && !blankish.test(parts[10].trim())) {
+    var m = parts[10].trim().match(/(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)?/i);
+    var te = document.getElementById('deadlineTime');
+    if (m) {
+      var h = parseInt(m[1], 10);
+      var ap = m[3] ? m[3].toUpperCase() : null;
+      if (ap === 'PM' && h < 12) h += 12;
+      if (ap === 'AM' && h === 12) h = 0;
+      te.value = pad2(h) + ':' + m[2];
+      te.style.borderColor = 'var(--primary)';
+    } else {
+      te.style.borderColor = '#c0392b';
+      warnings.push('Deadline time not understood: "' + parts[10].trim() + '".');
+    }
+  }
+
+  showFeedback(
+    warnings.length
+      ? 'Filled with warnings — the red fields need you:\n• ' + warnings.join('\n• ')
+      : 'Filled ' + parts.length + ' columns. Nothing is flagged — review and submit.',
+    warnings.length ? 'error' : 'success'
+  );
+}
+
+function showFeedback(msg, type) {
+  var fb = document.getElementById('autoFillFeedback');
+  fb.textContent = msg;
+  fb.style.display = 'block';
+  fb.style.background  = type === 'error' ? '#fdecea' : '#e8f5e9';
+  fb.style.color       = type === 'error' ? '#c62828' : '#2e7d32';
+  fb.style.border      = '1px solid ' + (type === 'error' ? '#ef9a9a' : '#a5d6a7');
+  if (type === 'success') setTimeout(function () { fb.style.display = 'none'; }, 6000);
+}
+
+// ---------------------------------------------------------------------------
+// AI PROMPT — built from CONFIG so it can never drift from the dropdowns
+// ---------------------------------------------------------------------------
+document.getElementById('copyAiPromptBtn').addEventListener('click', function () {
+  var btn = this;
+  if (!CONFIG) { alert('Form options are still loading. Try again in a second.'); return; }
+
+  var prompt =
+'Act as a strict technical-to-business translator for a development task tracker.\n' +
+'Convert the raw notes below into a SINGLE tab-separated line of 23 columns.\n\n' +
+'PARSING RULES\n' +
+'1. Exactly 23 columns, separated ONLY by real tab characters. No spaces around tabs.\n' +
+'2. Empty fields must be truly empty (\\t\\t). Never write "BLANK", "N/A", "None" or "-".\n' +
+'3. Column 1 is always [AUTO]. Column 14 is always NEW. Column 22 is always No.\n' +
+'4. Output the line and nothing else. No code fence, no commentary.\n\n' +
+'LANGUAGE RULES\n' +
+'- Columns 3 and 17 are read by non-technical management. Plain business English.\n' +
+'- Never include internal planning codes (AC-082, V64, D-C22.1, B305, Q7, M04-C03).\n' +
+'  Translate them into what they do — "database migration", "Fee Note screen".\n' +
+'- Exception: spell client comment numbers out in full, e.g. "(Client Comment 24)".\n' +
+'- Column 18 carries the technical detail (files, tables, endpoints, functions).\n' +
+'  Real code artifacts are fine there; planning codes are still banned.\n\n' +
+'COLUMNS\n' +
+' 1 Task ID          [AUTO]\n' +
+' 2 Date             mm/dd/yyyy\n' +
+' 3 Task Summary     plain English, max 60 chars\n' +
+' 4 Client/Project\n' +
+' 5 Module           [' + CONFIG.raw.modules.join(', ') + ']\n' +
+' 6 Issue Type       [' + CONFIG.raw.issueTypes.join(', ') + ']\n' +
+' 7 Submitter Email  (empty)\n' +
+' 8 Assigned Member  [' + CONFIG.raw.developers.join(', ') + ']\n' +
+' 9 Total Time       (empty)\n' +
+'10 Deadline Date    YYYY-MM-DD\n' +
+'11 Deadline Time    HH:MM AM/PM\n' +
+'12 Completed Date   (empty)\n' +
+'13 Completed Time   (empty)\n' +
+'14 Status           NEW\n' +
+'15 Planned          [' + CONFIG.raw.planned.join(', ') + ']\n' +
+'16 Priority         [' + CONFIG.raw.priorities.join(', ') + ']\n' +
+'17 Remarks          business explanation, no internal codes\n' +
+'18 Developer Remark technical detail\n' +
+'19 Start Time       (empty)\n' +
+'20 Reporter Name\n' +
+'21 Attachments      (empty)\n' +
+'22 SVN Committed    No\n' +
+'23 NA               (empty)\n\n' +
+'For several tasks at once, output one such line per task, newline separated,\n' +
+'and paste the block into Tracker Options > Bulk Add Tasks instead of this form.\n\n' +
+'RAW NOTES:\n[PASTE YOUR SESSION NOTES HERE]';
+
+  navigator.clipboard.writeText(prompt).then(function () {
+    var original = btn.textContent;
+    btn.textContent = 'Prompt copied';
+    btn.style.background = '#e8f5e9';
+    setTimeout(function () { btn.textContent = original; btn.style.background = '#e3f2fd'; }, 3000);
+  }).catch(function () {
+    alert('Clipboard blocked by the browser. Select the prompt manually from the console.');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// REMEMBER LAST REPORTER / ASSIGNEE (per browser)
+// ---------------------------------------------------------------------------
+function restoreRemembered() {
+  try {
+    var dev = localStorage.getItem('tracker_last_dev');
+    var rep = localStorage.getItem('tracker_last_reporter');
+    var sel = document.getElementById('assignedMember');
+    if (dev && Array.prototype.some.call(sel.options, function (o) { return o.value === dev; })) sel.value = dev;
+    if (rep) document.getElementById('reporter').value = rep;
+  } catch (e) { /* private window — ignore */ }
+}
+
+document.getElementById('taskForm').addEventListener('change', function (e) {
+  try {
+    if (e.target.id === 'assignedMember') localStorage.setItem('tracker_last_dev', e.target.value);
+    if (e.target.id === 'reporter')       localStorage.setItem('tracker_last_reporter', e.target.value);
+  } catch (err) { /* ignore */ }
+});
+</script>
+</body>
+</html>

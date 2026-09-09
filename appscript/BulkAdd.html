@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html>
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<style>
+  :root { --primary:#76B900; --primary-dark:#5B9000; --danger:#c0392b; --warn:#e67e22; --text:#2c3e50; }
+  * { box-sizing: border-box; }
+  body { font-family: Arial, sans-serif; font-size: 13px; color: var(--text);
+         margin: 0; padding: 14px; background: #f5f6fa; }
+
+  h2 { font-size: 15px; margin: 0 0 4px; }
+  .hint { color: #666; font-size: 12px; margin-bottom: 10px; line-height: 1.5; }
+  .hint code { background: #eceff1; padding: 1px 5px; border-radius: 3px; }
+
+  textarea { width: 100%; height: 130px; padding: 10px; border: 1px dashed #adb5bd;
+             border-radius: 5px; font-family: Consolas, Monaco, monospace; font-size: 12px;
+             white-space: pre; resize: vertical; }
+  textarea:focus { border-color: var(--primary); outline: none; }
+
+  .toolbar { display: flex; gap: 8px; align-items: center; margin: 10px 0; flex-wrap: wrap; }
+  button { border: none; border-radius: 4px; padding: 8px 15px; cursor: pointer;
+           font-size: 12px; font-weight: bold; }
+  button:disabled { opacity: .4; cursor: not-allowed; }
+  .btn-check  { background: #e3f2fd; color: #1976d2; border: 1px solid #90caf9; }
+  .btn-import { background: var(--primary); color: #fff; }
+  .btn-clear  { background: #ffebee; color: #c62828; border: 1px solid #ef9a9a; }
+  .spacer { flex: 1; }
+
+  .summary { font-size: 12px; font-weight: bold; }
+  .summary .ok  { color: var(--primary-dark); }
+  .summary .bad { color: var(--danger); }
+
+  .results { max-height: 300px; overflow: auto; background: #fff;
+             border: 1px solid #e0e0e0; border-radius: 5px; }
+  table { width: 100%; border-collapse: collapse; }
+  th { position: sticky; top: 0; background: #2d7d32; color: #fff; text-align: left;
+       padding: 7px 9px; font-size: 11px; text-transform: uppercase; letter-spacing: .4px; }
+  td { padding: 7px 9px; border-bottom: 1px solid #eee; vertical-align: top; font-size: 12px; }
+  tr.row-error td   { background: #fdecea; }
+  tr.row-warning td { background: #fff8e1; }
+  .tag { display: inline-block; padding: 1px 7px; border-radius: 9px;
+         font-size: 10px; font-weight: bold; text-transform: uppercase; }
+  .tag-ok    { background: #e8f5e9; color: var(--primary-dark); }
+  .tag-warn  { background: #fff3e0; color: var(--warn); }
+  .tag-error { background: #fde8e8; color: var(--danger); }
+  .msg { margin: 3px 0 0; padding-left: 14px; font-size: 11px; }
+  .msg.err  { color: var(--danger); }
+  .msg.warn { color: #b26a00; }
+  .lineno { color: #999; font-variant-numeric: tabular-nums; }
+
+  .banner { display: none; margin-top: 10px; padding: 11px 13px;
+            border-radius: 5px; font-size: 12px; white-space: pre-line; }
+  .banner.success { background: #e8f5e9; color: #2e7d32; border: 1px solid #a5d6a7; }
+  .banner.error   { background: #fdecea; color: #c62828; border: 1px solid #ef9a9a; }
+  .banner.busy    { background: #e3f2fd; color: #1565c0; border: 1px solid #90caf9; }
+</style>
+</head>
+<body>
+
+<h2>Bulk Add Tasks</h2>
+<p class="hint">
+  Paste one tab-separated line per task — the same 23-column format the
+  <b>Copy AI Prompt</b> button produces. A header row is ignored if present.
+  Task IDs are allocated here; leave column&nbsp;1 as <code>[AUTO]</code>.<br>
+  Nothing is written until you press <b>Import</b>, and Import stays locked while any row has an error.
+</p>
+
+<textarea id="paste" placeholder="[AUTO]&#9;09/08/2026&#9;Fix login redirect loop&#9;Prathap Valuers&#9;Valuation ERP&#9;Bug-Core&#9;&#9;Venul&#9;&#9;2026-09-10&#9;05:00 PM&#9;&#9;&#9;NEW&#9;Unplanned&#9;High&#9;…"></textarea>
+
+<div class="toolbar">
+  <button class="btn-check"  id="checkBtn"  onclick="runValidate()">Check rows</button>
+  <button class="btn-import" id="importBtn" onclick="runImport()" disabled>Import</button>
+  <button class="btn-clear"  onclick="clearAll()">Clear</button>
+  <span class="spacer"></span>
+  <span class="summary" id="summary"></span>
+</div>
+
+<div class="results" id="results" style="display:none">
+  <table>
+    <thead>
+      <tr><th style="width:44px">#</th><th style="width:78px">Status</th><th>Task</th></tr>
+    </thead>
+    <tbody id="tbody"></tbody>
+  </table>
+</div>
+
+<div class="banner" id="banner"></div>
+
+<script>
+var lastValidatedText = '';
+
+function el(id) { return document.getElementById(id); }
+
+function setBanner(msg, type) {
+  var b = el('banner');
+  if (!msg) { b.style.display = 'none'; return; }
+  b.textContent = msg;
+  b.className = 'banner ' + type;
+  b.style.display = 'block';
+}
+
+function busy(on, label) {
+  el('checkBtn').disabled = on;
+  el('importBtn').disabled = on || !canImport;
+  if (on) setBanner(label, 'busy');
+}
+
+var canImport = false;
+
+function clearAll() {
+  el('paste').value = '';
+  el('results').style.display = 'none';
+  el('tbody').innerHTML = '';
+  el('summary').textContent = '';
+  canImport = false;
+  el('importBtn').disabled = true;
+  setBanner('', '');
+}
+
+function runValidate() {
+  var text = el('paste').value;
+  if (!text.trim()) { setBanner('Paste something first.', 'error'); return; }
+
+  busy(true, 'Checking rows…');
+  google.script.run
+    .withSuccessHandler(onValidated)
+    .withFailureHandler(function (err) { busy(false); setBanner('Check failed: ' + err.message, 'error'); })
+    .validateBulkRows(text);
+}
+
+function onValidated(res) {
+  busy(false);
+
+  if (res.error) {
+    canImport = false;
+    el('importBtn').disabled = true;
+    el('results').style.display = 'none';
+    setBanner(res.error, 'error');
+    return;
+  }
+
+  lastValidatedText = el('paste').value;
+  renderRows(res.rows);
+
+  var warnCount = res.rows.filter(function (r) { return !r.errors.length && r.warnings.length; }).length;
+  el('summary').innerHTML =
+    '<span class="ok">' + res.validCount + ' ready</span>' +
+    (warnCount ? ' · ' + warnCount + ' with warnings' : '') +
+    (res.errorCount ? ' · <span class="bad">' + res.errorCount + ' blocked</span>' : '');
+
+  canImport = res.errorCount === 0 && res.validCount > 0;
+  el('importBtn').disabled = !canImport;
+  el('importBtn').textContent = canImport ? 'Import ' + res.validCount + ' task(s)' : 'Import';
+
+  setBanner(
+    res.errorCount
+      ? 'Fix the ' + res.errorCount + ' blocked row(s) above, then check again. Nothing has been written.'
+      : 'All ' + res.validCount + ' row(s) look good. Press Import to write them to Master.',
+    res.errorCount ? 'error' : 'success'
+  );
+}
+
+function renderRows(rows) {
+  var tbody = el('tbody');
+  tbody.innerHTML = '';
+
+  rows.forEach(function (r) {
+    var tr = document.createElement('tr');
+    if (r.errors.length)        tr.className = 'row-error';
+    else if (r.warnings.length) tr.className = 'row-warning';
+
+    var tdNo = document.createElement('td');
+    tdNo.className = 'lineno';
+    tdNo.textContent = r.lineNo;
+
+    var tdTag = document.createElement('td');
+    var tag = document.createElement('span');
+    if (r.errors.length)        { tag.className = 'tag tag-error'; tag.textContent = 'Blocked'; }
+    else if (r.warnings.length) { tag.className = 'tag tag-warn';  tag.textContent = 'Warning'; }
+    else                        { tag.className = 'tag tag-ok';    tag.textContent = 'Ready'; }
+    tdTag.appendChild(tag);
+
+    var tdBody = document.createElement('td');
+    var title = document.createElement('div');
+    title.textContent = r.preview;                 // textContent — never innerHTML
+    tdBody.appendChild(title);
+
+    r.errors.forEach(function (m) {
+      var p = document.createElement('div');
+      p.className = 'msg err';
+      p.textContent = '✕ ' + m;
+      tdBody.appendChild(p);
+    });
+    r.warnings.forEach(function (m) {
+      var p = document.createElement('div');
+      p.className = 'msg warn';
+      p.textContent = '! ' + m;
+      tdBody.appendChild(p);
+    });
+
+    tr.appendChild(tdNo); tr.appendChild(tdTag); tr.appendChild(tdBody);
+    tbody.appendChild(tr);
+  });
+
+  el('results').style.display = 'block';
+}
+
+function runImport() {
+  if (!canImport) return;
+
+  // Guard against editing the box after a successful check.
+  if (el('paste').value !== lastValidatedText) {
+    setBanner('The text changed since the last check. Press "Check rows" again.', 'error');
+    canImport = false;
+    el('importBtn').disabled = true;
+    return;
+  }
+
+  busy(true, 'Writing to Master… do not close this dialog.');
+  google.script.run
+    .withSuccessHandler(onImported)
+    .withFailureHandler(function (err) { busy(false); setBanner('Import failed: ' + err.message, 'error'); })
+    .commitBulkRows(lastValidatedText);
+}
+
+function onImported(res) {
+  busy(false);
+
+  if (!res || !res.success) {
+    setBanner('Import failed: ' + ((res && res.error) || 'unknown error') +
+              '\nNothing was written. Your paste is still in the box.', 'error');
+    return;
+  }
+
+  var msg = 'Imported ' + res.written + ' task(s): ' + res.firstId + ' … ' + res.lastId + '.';
+  if (res.devErrors && res.devErrors.length) {
+    msg += '\nMaster is correct, but these team tabs were skipped: ' + res.devErrors.join('; ') +
+           '\nRun Tracker Options > Sync Recent Tasks after fixing the tab names.';
+  }
+  setBanner(msg, 'success');
+
+  el('paste').value = '';
+  el('results').style.display = 'none';
+  el('tbody').innerHTML = '';
+  el('summary').textContent = '';
+  canImport = false;
+  el('importBtn').disabled = true;
+  el('importBtn').textContent = 'Import';
+}
+
+// Re-checking is required after any edit.
+el('paste').addEventListener('input', function () {
+  if (canImport) {
+    canImport = false;
+    el('importBtn').disabled = true;
+    el('summary').textContent = '';
+    setBanner('Text changed — press "Check rows" again.', 'busy');
+  }
+});
+</script>
+</body>
+</html>
