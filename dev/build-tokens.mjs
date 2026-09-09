@@ -80,6 +80,34 @@ for (const file of ordered) {
   css += `\n/* ===== ${file} ===== */\n${text.trim()}\n`;
 }
 
+// ------------------------------------------------- tokens the board adds itself
+// The mockups define a few variables in their own <style> that the design
+// system does not carry — the palette is greens only, so amber/red for
+// overdue and warning states were the designer's additions. Lift them
+// automatically so a design refresh can never silently drop them and leave
+// the overdue chips colourless.
+const defined = new Set([...css.matchAll(/(--[a-z0-9-]+)\s*:/gi)].map(m => m[1]));
+const boardFiles = readdirSync(projectDir).filter(f => f.endsWith('.dc.html'));
+const extras = new Map();
+
+for (const bf of boardFiles) {
+  const board = readFileSync(join(projectDir, bf), 'utf8');
+  const used = new Set([...board.matchAll(/var\((--[a-z0-9-]+)/gi)].map(m => m[1]));
+  for (const v of used) {
+    if (defined.has(v) || extras.has(v)) continue;
+    const decl = board.match(new RegExp(v.replace(/-/g, '\\-') + '\\s*:\\s*([^;]+);'));
+    if (decl) extras.set(v, decl[1].trim());
+    else console.warn('  !! used by the board but defined nowhere:', v);
+  }
+}
+
+if (extras.size) {
+  css += '\n/* ===== state colours — added by the board, not in the design system ===== */\n:root {\n';
+  for (const [k, v] of [...extras].sort()) css += `  ${k}: ${v};\n`;
+  css += '}\n';
+  console.log('  lifted ' + extras.size + ' board-local token(s):', [...extras.keys()].join(', '));
+}
+
 // --------------------------------------------------------------- brand marks
 const assetDir = join(projectDir, 'assets');
 const marks = {};
