@@ -382,24 +382,42 @@ function getFormConfig() {
 // SINGLE TASK SUBMISSION
 // ---------------------------------------------------------------------------
 
+/**
+ * Saving the task is the job. Attachments are an extra.
+ *
+ * Drive is therefore never touched unless something is actually being uploaded,
+ * and a Drive failure downgrades to a warning on a saved task instead of
+ * throwing the whole submission away. Reaching for the folder up front meant a
+ * task with no attachments at all still died if the folder was unreachable.
+ */
 function handleImageSubmission(data) {
-  var attachmentUrls = [], failedUploads = [];
+  var dropped = data.droppedFiles || [];
+  var pasted  = data.pastedImages || [];
+  var attachmentUrls = [], failedUploads = [], folderError = '';
 
-  try {
-    var folder = DriveApp.getFolderById(ATTACHMENT_FOLDER_ID);
+  if (dropped.length || pasted.length) {
+    var folder = null;
+    try {
+      folder = DriveApp.getFolderById(ATTACHMENT_FOLDER_ID);
+    } catch (err) {
+      folderError = 'The attachments folder could not be opened, so nothing was uploaded. ' +
+                    'Ask Venul to share it with you, or paste links instead. (' + err.message + ')';
+    }
 
-    (data.droppedFiles || []).forEach(function (f) {
-      var url = uploadBase64ToDrive_(f.data, f.name, folder);
-      if (url) attachmentUrls.push(url); else failedUploads.push(f.name);
-    });
-
-    (data.pastedImages || []).forEach(function (b64, i) {
-      var name = 'Screenshot_' + (i + 1) + '_' + sanitizeFilename_(data.client) + '.png';
-      var url = uploadBase64ToDrive_(b64, name, folder);
-      if (url) attachmentUrls.push(url); else failedUploads.push(name);
-    });
-  } catch (err) {
-    return { success: false, error: 'Attachment folder unreachable: ' + err.message };
+    if (folder) {
+      dropped.forEach(function (f) {
+        var url = uploadBase64ToDrive_(f.data, f.name, folder);
+        if (url) attachmentUrls.push(url); else failedUploads.push(f.name);
+      });
+      pasted.forEach(function (b64, i) {
+        var name = 'Screenshot_' + (i + 1) + '_' + sanitizeFilename_(data.client) + '.png';
+        var url = uploadBase64ToDrive_(b64, name, folder);
+        if (url) attachmentUrls.push(url); else failedUploads.push(name);
+      });
+    } else {
+      dropped.forEach(function (f) { failedUploads.push(f.name); });
+      pasted.forEach(function (_, i) { failedUploads.push('Screenshot ' + (i + 1)); });
+    }
   }
 
   var manual = data.attachmentText ? String(data.attachmentText).trim() : '';
@@ -408,10 +426,38 @@ function handleImageSubmission(data) {
   data.attachmentUrl = links;
 
   var result = processForm(data);
-  if (result.success && failedUploads.length) {
-    result.warning = 'Task saved, but these attachments failed to upload: ' + failedUploads.join(', ');
+
+  if (result.success && (failedUploads.length || folderError)) {
+    result.warning = 'Task saved. ' +
+      (folderError || 'These attachments did not upload: ' + failedUploads.join(', ')) +
+      (folderError && failedUploads.length ? ' Not uploaded: ' + failedUploads.join(', ') : '');
   }
   return result;
+}
+
+/**
+ * Reports whether the signed-in user can actually write to the attachments
+ * folder. With "Execute as: User accessing the web app" each person needs their
+ * own access, so this is the first thing to check when uploads start failing.
+ */
+function checkAttachmentFolder() {
+  var ui = SpreadsheetApp.getUi();
+  try {
+    var folder = DriveApp.getFolderById(ATTACHMENT_FOLDER_ID);
+    var name = folder.getName();
+    var probe = folder.createFile(Utilities.newBlob('ok', 'text/plain', '__access_probe.txt'));
+    probe.setTrashed(true);
+    ui.alert('Attachments folder OK\n\nFolder: ' + name + '\nId: ' + ATTACHMENT_FOLDER_ID +
+             '\n\nYou can read and write it. Uploads will work for you.');
+  } catch (e) {
+    ui.alert('Attachments folder NOT reachable\n\nId: ' + ATTACHMENT_FOLDER_ID +
+             '\n\n' + e.message +
+             '\n\nUsual causes:\n' +
+             '· the folder is not shared with this account (needs Editor)\n' +
+             '· the folder was moved to the bin\n' +
+             '· ATTACHMENT_FOLDER_ID in Code.gs is out of date\n\n' +
+             'Tasks still save without attachments — only uploads are affected.');
+  }
 }
 
 function uploadBase64ToDrive_(base64Data, fileName, folder) {
@@ -1833,6 +1879,7 @@ function onOpen() {
     .addItem('Add Team Member Tab', 'addTeamMemberTab')
     .addItem('Check Sheet Alignment', 'verifySheetAlignment')
     .addItem('Repair Header Row', 'repairHeaders')
+    .addItem('Check Attachments Folder', 'checkAttachmentFolder')
     .addSeparator()
     .addItem('Lock Sheets (protect automated columns)', 'applySheetProtection')
     .addItem('Unlock Sheets', 'removeSheetProtection')
