@@ -208,7 +208,7 @@ var DASHBOARD_MAX_TASKS = 400;
  * UNITS. Column 9 is headed "Total Time Spent (Hrs)" but stores a DAY FRACTION,
  * because Sheets duration formatting works in days. 0.25 means six hours, not
  * fifteen minutes. Any KPI formula reading the raw cell must multiply by 24.
- * Use toDayFraction_() to read and divide hours by 24 to write. Never assume
+ * Use readStoredHours_() to read and write plain hours. Never assume
  * the cell is a plain number — a duration-formatted cell returns a Date.
  *
  * MEASUREMENT. Elapsed time is wall-clock between Start and the next status
@@ -289,16 +289,28 @@ function allTaskSheetNames_() {
 }
 
 /** Duration cells come back as Date. Normalise to a day fraction before adding. */
-function toDayFraction_(value) {
+/**
+ * Reads column 9 as DECIMAL HOURS.
+ *
+ * 2.5 means two and a half hours. The column used to hold a day fraction
+ * (0.25 = six hours) because Sheets duration formatting works in days, which
+ * meant the header said "(Hrs)" while SUM() returned a twenty-fourth of the
+ * real figure. Storing hours makes the header true and the KPI arithmetic
+ * plain. migrateTimeToHours() converts the historical values once.
+ *
+ * A duration-FORMATTED cell still hands back a Date, so that case is converted
+ * from days to hours here.
+ */
+function readStoredHours_(value) {
   if (value instanceof Date) {
     var base = new Date(1899, 11, 30);
-    return (value.getTime() - base.getTime()) / (24 * 60 * 60 * 1000);
+    return ((value.getTime() - base.getTime()) / (24 * 60 * 60 * 1000)) * 24;
   }
   if (typeof value === 'number') return isFinite(value) ? value : 0;
 
   // Older rows hold text like "2 Hours" or "mora than a Day" from a legacy
-  // dropdown. parseFloat("2 Hours") is 2, which this column reads as two DAYS —
-  // a 24x overstatement straight into the KPI. Only accept a bare number.
+  // dropdown. parseFloat("2 Hours") is 2, which would silently become 2 hours
+  // of work nobody logged. Only a bare number counts.
   var s = String(value == null ? '' : value).trim();
   if (!s) return 0;
   if (!/^-?\d+(\.\d+)?$/.test(s)) {
@@ -307,6 +319,118 @@ function toDayFraction_(value) {
   }
   var n = parseFloat(s);
   return isFinite(n) ? n : 0;
+}
+
+/** Kept for the historical backfill script, which still works in day fractions. */
+function toDayFraction_(value) { return readStoredHours_(value) / 24; }
+
+var PROP_TIME_IN_HOURS = 'TIME_MIGRATED_TO_HOURS';
+
+/** The raw stored number BEFORE migration, when the column held day fractions. */
+function rawDayFraction_(value) {
+  if (value instanceof Date) {
+    var base = new Date(1899, 11, 30);
+    return (value.getTime() - base.getTime()) / (24 * 60 * 60 * 1000);
+  }
+  if (typeof value === 'number') return isFinite(value) ? value : null;
+  var s = String(value == null ? '' : value).trim();
+  if (!s) return null;
+  return /^-?\d+(\.\d+)?$/.test(s) ? parseFloat(s) : null;   // null = leave alone
+}
+
+/**
+ * One-off: converts column 9 from day fractions to decimal hours (x24) across
+ * Master and every task tab, and clears any duration number format so 2.5
+ * reads as 2.5 hours rather than being redrawn as 60:00.
+ *
+ * Runs dry the first time and shows exactly what it would change. Refuses to
+ * run twice — the flag lives in Script Properties, because running it again
+ * would multiply everything by 24 a second time.
+ */
+function migrateTimeToHours() {
+  var ui = SpreadsheetApp.getUi();
+  var props = PropertiesService.getScriptProperties();
+
+  if (props.getProperty(PROP_TIME_IN_HOURS)) {
+    ui.alert('Already migrated',
+      'Column 9 was converted to hours on ' + props.getProperty(PROP_TIME_IN_HOURS) + '.\n\n' +
+      'Running it again would multiply every value by 24 a second time, so this is blocked.',
+      ui.ButtonSet.OK);
+    return;
+  }
+
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var sheets = [MASTER_SHEET_NAME].concat(allTaskSheetNames_());
+  var plan = [], totalCells = 0, skipped = 0;
+
+  sheets.forEach(function (name) {
+    var sheet = ss.getSheetByName(name);
+    if (!sheet) return;
+    var last = getRealLastRow(sheet);
+    if (last < 2) return;
+
+    var vals = sheet.getRange(2, TOTAL_TIME_COL, last - 1, 1).getValues();
+    var changed = 0, sample = [];
+    for (var i = 0; i < vals.length; i++) {
+      var frac = rawDayFraction_(vals[i][0]);
+      if (frac === null || frac === 0) { if (vals[i][0] !== '' && frac === null) skipped++; continue; }
+      changed++;
+      if (sample.length < 3) sample.push(frac.toFixed(4) + ' → ' + (frac * 24).toFixed(2) + 'h');
+    }
+    totalCells += changed;
+    if (changed) plan.push('  ' + name + ': ' + changed + ' value(s)   e.g. ' + sample.join(' · '));
+  });
+
+  if (!totalCells) {
+    ui.alert('Nothing to migrate', 'No numeric time values were found.', ui.ButtonSet.OK);
+    return;
+  }
+
+  var go = ui.alert('Convert time to hours?',
+    'Column 9 currently holds a day fraction, so 0.25 means six hours and the\n' +
+    'header "(Hrs)" is wrong. This multiplies every value by 24 so the number\n' +
+    'is the hours, and clears any duration formatting.\n\n' +
+    plan.join('\n') + '\n\n' +
+    totalCells + ' value(s) across ' + plan.length + ' sheet(s).' +
+    (skipped ? '\n' + skipped + ' non-numeric value(s) will be left untouched.' : '') +
+    '\n\nMAKE A COPY OF THE SHEET FIRST (File > Make a copy).\n' +
+    'This cannot be undone from here and can only be run once.\n\nProceed?',
+    ui.ButtonSet.YES_NO);
+  if (go !== ui.Button.YES) return;
+
+  var done = [];
+  sheets.forEach(function (name) {
+    var sheet = ss.getSheetByName(name);
+    if (!sheet) return;
+    var last = getRealLastRow(sheet);
+    if (last < 2) return;
+
+    var range = sheet.getRange(2, TOTAL_TIME_COL, last - 1, 1);
+    var vals = range.getValues();
+    var out = [], n = 0;
+    for (var i = 0; i < vals.length; i++) {
+      var frac = rawDayFraction_(vals[i][0]);
+      if (frac === null) { out.push([vals[i][0]]); continue; }   // leave text as it is
+      if (frac === 0)    { out.push(['']); continue; }
+      out.push([Math.round(frac * 24 * 100) / 100]);
+      n++;
+    }
+    range.setNumberFormat('0.00');   // a duration format would redraw 2.5 as 60:00
+    range.setValues(out);
+    if (n) done.push(name + ' (' + n + ')');
+  });
+
+  props.setProperty(PROP_TIME_IN_HOURS,
+    Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm'));
+  SpreadsheetApp.flush();
+
+  ui.alert('Time converted to hours',
+    'Updated: ' + done.join(', ') + '\n\n' +
+    'Column 9 now holds decimal hours — 2.5 means 2h 30m, and SUM() over the\n' +
+    'column gives real hours. The dashboard still shows "2h 30m".\n\n' +
+    'Point any KPI formula straight at the column; the old x24 correction must\n' +
+    'be removed or the figures will be 24 times too big.',
+    ui.ButtonSet.OK);
 }
 
 // ---------------------------------------------------------------------------
@@ -1244,7 +1368,7 @@ function verifySheetAlignment() {
  * Applies a status change to Master and the team tab together: starts the
  * clock, banks the elapsed session on pause/done, stamps completion.
  *
- * The running total is normalised through toDayFraction_ first. Duration cells
+ * The running total is normalised through readStoredHours_ first. Duration cells
  * return a Date, and parseFloat(Date) is NaN — reading it raw would silently
  * reset the task's accumulated hours on every pause.
  */
@@ -1293,8 +1417,8 @@ function applyStatusChange_(masterSheet, masterRow, devSheet, devRow, newStatus,
                'h. The timer was probably left running.';
       }
 
-      var previous = toDayFraction_(masterSheet.getRange(masterRow, TOTAL_TIME_COL).getValue());
-      writeBoth(TOTAL_TIME_COL, previous + (hrs / 24));
+      var previous = readStoredHours_(masterSheet.getRange(masterRow, TOTAL_TIME_COL).getValue());
+      writeBoth(TOTAL_TIME_COL, previous + hrs);
       clearBoth(SESSION_START_COL);
 
       if (note) {
@@ -1482,7 +1606,7 @@ function getSidebarTasks(filters) {
     }
     if (tasks.length >= DASHBOARD_MAX_TASKS) { omittedOld++; continue; }
 
-    var timeSpentHrs = toDayFraction_(row[8]) * 24;
+    var timeSpentHrs = readStoredHours_(row[8]);
 
     var sessionStart = row[SESSION_START_COL - 1];
     var isLive = (sessionStart instanceof Date) && status === 'In Progress';
@@ -1771,14 +1895,14 @@ function addComment(taskId, body, alsoLogMinutes) {
     var logged = 0;
     if (alsoLogMinutes !== false) {
       var row = findRowInSheet_(masterSheet, taskId);
-      var previous = toDayFraction_(masterSheet.getRange(row, TOTAL_TIME_COL).getValue());
-      masterSheet.getRange(row, TOTAL_TIME_COL).setValue(previous + (COMMENT_LOGS_MINUTES / 60 / 24));
+      var previous = readStoredHours_(masterSheet.getRange(row, TOTAL_TIME_COL).getValue());
+      masterSheet.getRange(row, TOTAL_TIME_COL).setValue(previous + (COMMENT_LOGS_MINUTES / 60));
 
       var assigned = String(masterSheet.getRange(row, MASTER_COL_ASSIGNED).getValue()).trim();
       if (DEVELOPER_SHEET_NAMES.indexOf(assigned) !== -1) {
         var dev = ss.getSheetByName(assigned);
         var devRow = dev ? findRowInSheet_(dev, taskId) : null;
-        if (devRow) dev.getRange(devRow, TOTAL_TIME_COL).setValue(previous + (COMMENT_LOGS_MINUTES / 60 / 24));
+        if (devRow) dev.getRange(devRow, TOTAL_TIME_COL).setValue(previous + (COMMENT_LOGS_MINUTES / 60));
       }
       logged = COMMENT_LOGS_MINUTES;
     }
@@ -2001,6 +2125,7 @@ function onOpen() {
     .addItem('Repair Header Row', 'repairHeaders')
     .addItem('Check Attachments Folder', 'checkAttachmentFolder')
     .addItem('Diagnose Dropdowns', 'diagnoseValidation')
+    .addItem('Convert Time to Hours (once)', 'migrateTimeToHours')
     .addSeparator()
     .addItem('Lock Sheets (protect automated columns)', 'applySheetProtection')
     .addItem('Unlock Sheets', 'removeSheetProtection')
