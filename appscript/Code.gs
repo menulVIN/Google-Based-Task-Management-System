@@ -525,10 +525,31 @@ function processForm(formData) {
 
     return { success: true, taskId: taskId };
   } catch (error) {
-    return { success: false, error: error.message };
+    return { success: false, error: friendlyWriteError_(error) };
   } finally {
     lock.releaseLock();
   }
+}
+
+/**
+ * A strict dropdown on any task column makes setValues throw, and Sheets
+ * reports it as a cell reference the submitter cannot act on. Name the real
+ * cause instead.
+ */
+function friendlyWriteError_(error) {
+  var msg = String(error && error.message || error);
+  if (/data validation/i.test(msg)) {
+    var cell = (msg.match(/cell\s+([A-Z]+\d+)/i) || [])[1] || '';
+    var col  = (cell.match(/^[A-Z]+/) || [])[0];
+    var idx  = 0;
+    for (var i = 0; i < col.length; i++) idx = idx * 26 + (col.charCodeAt(i) - 64);
+    var header = MASTER_HEADERS[idx - 1] || ('column ' + col);
+    return 'The sheet is rejecting "' + header + '" because its dropdown is out of date — ' +
+           'it does not yet list everyone on the team. ' +
+           'Ask Venul to run Tracker Options > Admin > Refresh Dropdowns. ' +
+           'Nothing was saved.';
+  }
+  return msg;
 }
 
 /** The one place that knows the 22-column row shape. */
@@ -865,30 +886,111 @@ function removeSheetProtection() {
 }
 
 /** Dropdowns on the editable columns so hand-edits stay inside the allowed values. */
+/**
+ * Only these columns carry a dropdown. Every other task column is cleared.
+ *
+ * A strict rule (setAllowInvalid false) makes Apps Script THROW on setValues —
+ * it does not quietly write through. So a stale rule anywhere in columns 1..23
+ * blocks the whole row, and the user gets a raw Sheets error naming a cell.
+ * That is what a leftover rule on column G (the submitter's EMAIL, listing
+ * developer names) was doing.
+ */
+var VALIDATED_COLUMNS = { 8: 'assigned', 14: 'status', 22: 'svn' };
+
 function applyDropdowns_(ss) {
   var statusRule = SpreadsheetApp.newDataValidation()
     .requireValueInList(ALLOWED.status, true).setAllowInvalid(false)
     .setHelpText('Pick a status from the list.').build();
   var svnRule = SpreadsheetApp.newDataValidation()
     .requireValueInList(ALLOWED.svn, true).setAllowInvalid(false).build();
+  // Built from the live team list, so adding someone to DEVELOPER_SHEET_NAMES
+  // and running this is all that is needed to let work be assigned to them.
   var assignedRule = SpreadsheetApp.newDataValidation()
-    .requireValueInList(DEVELOPER_SHEET_NAMES, true).setAllowInvalid(false).build();
+    .requireValueInList(DEVELOPER_SHEET_NAMES, true).setAllowInvalid(false)
+    .setHelpText('Pick a current team member.').build();
+
+  var cleared = 0;
 
   allTaskSheetNames_().concat([MASTER_SHEET_NAME]).forEach(function (name) {
     var sheet = ss.getSheetByName(name);
     if (!sheet) return;
     var rows = Math.max(sheet.getMaxRows() - 1, 1);
+
+    // Wipe every task column first, so no rule from an earlier setup survives.
+    for (var c = 1; c <= SESSION_START_COL; c++) {
+      if (VALIDATED_COLUMNS[c]) continue;
+      var range = sheet.getRange(2, c, rows, 1);
+      if (range.getDataValidation() || range.getDataValidations().some(function (r) { return r[0]; })) {
+        range.clearDataValidations();
+        cleared++;
+      }
+    }
+
     sheet.getRange(2, SYNC_COLUMNS['Status'], rows, 1).setDataValidation(statusRule);
     sheet.getRange(2, SYNC_COLUMNS['SVN Committed'], rows, 1).setDataValidation(svnRule);
+
+    // Assignment is chosen on Master only; team tabs mirror whatever Master says.
     if (name === MASTER_SHEET_NAME) {
       sheet.getRange(2, MASTER_COL_ASSIGNED, rows, 1).setDataValidation(assignedRule);
+    } else {
+      sheet.getRange(2, MASTER_COL_ASSIGNED, rows, 1).clearDataValidations();
     }
   });
+
+  return cleared;
+}
+
+/**
+ * Lists every task column that carries a rule and what it allows.
+ * Run this when a submission is rejected naming a cell — it shows which column
+ * is objecting and whether the allowed values still match the team.
+ */
+function diagnoseValidation() {
+  var ui = SpreadsheetApp.getUi();
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+  var headers = MASTER_HEADERS;
+  var out = [], problems = [];
+
+  [MASTER_SHEET_NAME].concat(allTaskSheetNames_()).forEach(function (name) {
+    var sheet = ss.getSheetByName(name);
+    if (!sheet) return;
+    var probe = Math.min(getRealLastRow(sheet) + 1, sheet.getMaxRows());
+    if (probe < 2) probe = 2;
+
+    var lines = [];
+    for (var c = 1; c <= SESSION_START_COL; c++) {
+      var rule = sheet.getRange(probe, c).getDataValidation();
+      if (!rule) continue;
+      var vals = [];
+      try { vals = rule.getCriteriaValues()[0] || []; } catch (e) {}
+      var label = colLetter_(c) + ' ' + (headers[c - 1] || '?');
+      lines.push('   ' + label + ' → ' + (vals.length ? vals.join(', ') : '(non-list rule)'));
+
+      if (!VALIDATED_COLUMNS[c]) problems.push(name + ' ' + label + ' should have no rule');
+      if (c === MASTER_COL_ASSIGNED && vals.length) {
+        DEVELOPER_SHEET_NAMES.forEach(function (d) {
+          if (vals.indexOf(d) === -1) problems.push(name + ' ' + label + ' is missing "' + d + '"');
+        });
+      }
+    }
+    if (lines.length) out.push(name + ':\n' + lines.join('\n'));
+  });
+
+  ui.alert('Data validation',
+    (problems.length ? 'PROBLEMS:\n  ' + problems.join('\n  ') +
+       '\n\nRun Admin > Refresh Dropdowns to fix all of these.\n\n' : 'No problems found.\n\n') +
+    (out.join('\n\n') || 'No validation rules anywhere.'),
+    ui.ButtonSet.OK);
 }
 
 function applyDropdownsMenu() {
-  applyDropdowns_(SpreadsheetApp.getActiveSpreadsheet());
-  SpreadsheetApp.getUi().alert('Dropdowns refreshed on all task sheets.');
+  var cleared = applyDropdowns_(SpreadsheetApp.getActiveSpreadsheet());
+  SpreadsheetApp.getUi().alert(
+    'Dropdowns refreshed.\n\n' +
+    'Assignable: ' + DEVELOPER_SHEET_NAMES.join(', ') + '\n' +
+    'Status: ' + ALLOWED.status.join(', ') + '\n\n' +
+    (cleared ? 'Cleared ' + cleared + ' stale rule(s) from columns that should not have one.'
+             : 'No stale rules found.'));
 }
 
 // ---------------------------------------------------------------------------
@@ -1880,6 +1982,7 @@ function onOpen() {
     .addItem('Check Sheet Alignment', 'verifySheetAlignment')
     .addItem('Repair Header Row', 'repairHeaders')
     .addItem('Check Attachments Folder', 'checkAttachmentFolder')
+    .addItem('Diagnose Dropdowns', 'diagnoseValidation')
     .addSeparator()
     .addItem('Lock Sheets (protect automated columns)', 'applySheetProtection')
     .addItem('Unlock Sheets', 'removeSheetProtection')
