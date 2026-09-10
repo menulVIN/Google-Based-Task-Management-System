@@ -114,7 +114,14 @@ var PROTECTION_TAG = 'Tracker — automated columns locked';
 
 /** Single source of truth for every dropdown: sheet, form, and bulk import. */
 var ALLOWED = {
-  status:   ['New', 'In Progress', 'Paused', 'Done', 'Blocked'],
+  /**
+   * These are the statuses actually in the sheet, in the sheet's own order.
+   * "On Hold" and "Awaiting Info" are long-standing values; leaving them out
+   * would make every row that uses one unwritable, because a strict rule makes
+   * setValues throw — which would break row copies and the sync audit.
+   * "Blocked" is the one addition, and nothing has used it yet.
+   */
+  status:   ['New', 'In Progress', 'On Hold', 'Awaiting Info', 'Paused', 'Done', 'Blocked'],
   priority: ['Critical', 'High', 'Medium', 'Low'],
   planned:  ['Unplanned', 'Planned'],   // order matches the form people are used to
   svn:      ['Yes', 'No'],
@@ -287,8 +294,19 @@ function toDayFraction_(value) {
     var base = new Date(1899, 11, 30);
     return (value.getTime() - base.getTime()) / (24 * 60 * 60 * 1000);
   }
-  var n = parseFloat(value);
-  return isNaN(n) ? 0 : n;
+  if (typeof value === 'number') return isFinite(value) ? value : 0;
+
+  // Older rows hold text like "2 Hours" or "mora than a Day" from a legacy
+  // dropdown. parseFloat("2 Hours") is 2, which this column reads as two DAYS —
+  // a 24x overstatement straight into the KPI. Only accept a bare number.
+  var s = String(value == null ? '' : value).trim();
+  if (!s) return 0;
+  if (!/^-?\d+(\.\d+)?$/.test(s)) {
+    Logger.log('Ignoring non-numeric time value: "' + s + '"');
+    return 0;
+  }
+  var n = parseFloat(s);
+  return isFinite(n) ? n : 0;
 }
 
 // ---------------------------------------------------------------------------

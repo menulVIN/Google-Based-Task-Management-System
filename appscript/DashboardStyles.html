@@ -163,11 +163,13 @@
   .card:hover { border-color:var(--ink-400); box-shadow:var(--shadow-sm); }
   .card::before { content:""; position:absolute; left:0; top:0; bottom:0; width:3px;
                   background:var(--line-200); }
-  .card.st-new::before         { background:var(--ink-400); }
-  .card.st-in-progress::before { background:var(--green-lime); }
-  .card.st-paused::before      { background:var(--state-warn); }
-  .card.st-done::before        { background:var(--green-medium); }
-  .card.st-blocked::before     { background:var(--state-stop); }
+  .card.st-new::before           { background:var(--ink-400); }
+  .card.st-in-progress::before   { background:var(--green-lime); }
+  .card.st-on-hold::before       { background:var(--state-warn); }
+  .card.st-awaiting-info::before { background:var(--state-warn); }
+  .card.st-paused::before        { background:var(--state-warn); }
+  .card.st-done::before          { background:var(--green-medium); }
+  .card.st-blocked::before       { background:var(--state-stop); }
   .card.overdue::before        { background:var(--state-stop); }
   .card.st-done { background:var(--green-wash); }
   .card.selected { border-color:var(--green-medium); box-shadow:var(--shadow-sm); }
@@ -191,11 +193,13 @@
            font:var(--fw-semibold) 11.5px var(--font-body); white-space:nowrap; }
   .state::before { content:""; width:6px; height:6px; border-radius:50%;
                    background:currentColor; display:inline-block; }
-  .state.st-new         { color:var(--ink-400); }
-  .state.st-in-progress { color:var(--green-medium); }
-  .state.st-paused      { color:var(--state-warn); }
-  .state.st-done        { color:var(--green-primary); }
-  .state.st-blocked     { color:var(--state-stop); }
+  .state.st-new           { color:var(--ink-400); }
+  .state.st-in-progress   { color:var(--green-medium); }
+  .state.st-on-hold       { color:var(--state-warn); }
+  .state.st-awaiting-info { color:var(--state-warn); }
+  .state.st-paused        { color:var(--state-warn); }
+  .state.st-done          { color:var(--green-primary); }
+  .state.st-blocked       { color:var(--state-stop); }
 
   .pill { font:var(--fw-semibold) 10.5px var(--font-body); padding:2px 8px;
           border-radius:var(--radius-pill); white-space:nowrap; }
