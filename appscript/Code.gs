@@ -1051,35 +1051,48 @@ function applyDropdowns_(ss) {
     .requireValueInList(DEVELOPER_SHEET_NAMES, true).setAllowInvalid(false)
     .setHelpText('Pick a current team member.').build();
 
-  var cleared = 0;
+  var cleared = 0, blocked = [];
 
   allTaskSheetNames_().concat([MASTER_SHEET_NAME]).forEach(function (name) {
     var sheet = ss.getSheetByName(name);
     if (!sheet) return;
     var rows = Math.max(sheet.getMaxRows() - 1, 1);
 
+    // A Google Sheets Table makes its columns "typed" and rejects any validation
+    // change, so each column is attempted on its own and a refusal is reported
+    // rather than aborting the whole refresh.
+    function attempt(col, fn) {
+      try { fn(sheet.getRange(2, col, rows, 1)); return true; }
+      catch (e) {
+        if (/typed column|not allowed on cells/i.test(String(e.message))) {
+          if (blocked.indexOf(name) === -1) blocked.push(name);
+        } else { throw e; }
+        return false;
+      }
+    }
+
     // Wipe every task column first, so no rule from an earlier setup survives.
     for (var c = 1; c <= SESSION_START_COL; c++) {
       if (VALIDATED_COLUMNS[c]) continue;
       var range = sheet.getRange(2, c, rows, 1);
-      if (range.getDataValidation() || range.getDataValidations().some(function (r) { return r[0]; })) {
-        range.clearDataValidations();
-        cleared++;
-      }
+      var has = false;
+      try { has = !!range.getDataValidation() || range.getDataValidations().some(function (r) { return r[0]; }); }
+      catch (e) { has = false; }
+      if (has && attempt(c, function (r) { r.clearDataValidations(); })) cleared++;
     }
 
-    sheet.getRange(2, SYNC_COLUMNS['Status'], rows, 1).setDataValidation(statusRule);
-    sheet.getRange(2, SYNC_COLUMNS['SVN Committed'], rows, 1).setDataValidation(svnRule);
+    attempt(SYNC_COLUMNS['Status'],        function (r) { r.setDataValidation(statusRule); });
+    attempt(SYNC_COLUMNS['SVN Committed'], function (r) { r.setDataValidation(svnRule); });
 
     // Assignment is chosen on Master only; team tabs mirror whatever Master says.
     if (name === MASTER_SHEET_NAME) {
-      sheet.getRange(2, MASTER_COL_ASSIGNED, rows, 1).setDataValidation(assignedRule);
+      attempt(MASTER_COL_ASSIGNED, function (r) { r.setDataValidation(assignedRule); });
     } else {
-      sheet.getRange(2, MASTER_COL_ASSIGNED, rows, 1).clearDataValidations();
+      attempt(MASTER_COL_ASSIGNED, function (r) { r.clearDataValidations(); });
     }
   });
 
-  return cleared;
+  return { cleared: cleared, blocked: blocked };
 }
 
 /**
@@ -1087,6 +1100,86 @@ function applyDropdowns_(ss) {
  * Run this when a submission is rejected naming a cell — it shows which column
  * is objecting and whether the allowed values still match the team.
  */
+/**
+ * Works out where the data ACTUALLY sits, by what each column contains rather
+ * than what its header claims.
+ *
+ * Repair Header Row only checked column A for TASK- ids, so a sheet whose data
+ * was shifted from the middle onwards passed the guard and then had canonical
+ * headings written over misplaced data — making the mismatch invisible instead
+ * of fixing it. This is the tool that finds that.
+ */
+function diagnoseRowShift() {
+  var ui = SpreadsheetApp.getUi();
+  var ss = SpreadsheetApp.getActiveSpreadsheet();
+
+  // Fingerprints for the columns whose content is unmistakable.
+  var expect = {
+    1:  { name: 'Task ID',        test: function (v) { return /^TASK-\d+$/.test(String(v).trim()); } },
+    7:  { name: 'Submitter email',test: function (v) { return /@/.test(String(v)); } },
+    8:  { name: 'Assigned Member',test: function (v) { return allTaskSheetNames_().indexOf(String(v).trim()) !== -1; } },
+    14: { name: 'Status',         test: function (v) { return ALLOWED.status.indexOf(String(v).trim()) !== -1; } },
+    15: { name: 'Planned/Unplan', test: function (v) { return ALLOWED.planned.indexOf(String(v).trim()) !== -1; } },
+    16: { name: 'Priority',       test: function (v) { return ALLOWED.priority.indexOf(String(v).trim()) !== -1; } },
+    22: { name: 'SVN Committed',  test: function (v) { return ALLOWED.svn.indexOf(String(v).trim()) !== -1; } }
+  };
+
+  var report = [], verdicts = [];
+
+  [MASTER_SHEET_NAME].concat(allTaskSheetNames_()).forEach(function (name) {
+    var sheet = ss.getSheetByName(name);
+    if (!sheet) return;
+    var last = getRealLastRow(sheet);
+    if (last < 2) return;
+
+    var n = Math.min(30, last - 1);
+    var data = sheet.getRange(2, 1, n, SESSION_START_COL).getValues();
+    var lines = [], shifts = {};
+
+    Object.keys(expect).forEach(function (colStr) {
+      var col = parseInt(colStr, 10), spec = expect[col];
+
+      // Where does this kind of value actually live? Scan nearby columns.
+      var best = null, bestHits = 0;
+      for (var c = Math.max(1, col - 3); c <= Math.min(SESSION_START_COL, col + 3); c++) {
+        var hits = 0;
+        for (var r = 0; r < n; r++) if (spec.test(data[r][c - 1])) hits++;
+        if (hits > bestHits) { bestHits = hits; best = c; }
+      }
+      if (!bestHits) return;                       // column genuinely empty — no opinion
+
+      if (best !== col) {
+        var delta = best - col;
+        shifts[delta] = (shifts[delta] || 0) + 1;
+        lines.push('   ' + spec.name + ': expected ' + colLetter_(col) +
+                   ', found in ' + colLetter_(best) + '  (' + bestHits + '/' + n + ' rows)');
+      }
+    });
+
+    if (lines.length) {
+      var worst = Object.keys(shifts).sort(function (a, b) { return shifts[b] - shifts[a]; })[0];
+      verdicts.push(name + ' — data sits ' + Math.abs(worst) + ' column(s) ' +
+                    (worst > 0 ? 'RIGHT' : 'LEFT') + ' of its headings');
+      report.push(name + ':\n' + lines.join('\n'));
+    }
+  });
+
+  if (!report.length) {
+    ui.alert('Column check',
+      'Every sheet holds the kind of data its headings promise. No shift found.',
+      ui.ButtonSet.OK);
+    return;
+  }
+
+  ui.alert('Columns do not match their headings',
+    verdicts.join('\n') + '\n\n' + report.join('\n\n') +
+    '\n\nDo NOT run Repair Header Row on these — it only rewrites headings and ' +
+    'would hide the problem again.\n\n' +
+    'The data has to be moved to match the headings, or the headings moved to ' +
+    'match the data. Send me this report and I will tell you which.',
+    ui.ButtonSet.OK);
+}
+
 function diagnoseValidation() {
   var ui = SpreadsheetApp.getUi();
   var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -1126,13 +1219,19 @@ function diagnoseValidation() {
 }
 
 function applyDropdownsMenu() {
-  var cleared = applyDropdowns_(SpreadsheetApp.getActiveSpreadsheet());
+  var res = applyDropdowns_(SpreadsheetApp.getActiveSpreadsheet());
   SpreadsheetApp.getUi().alert(
     'Dropdowns refreshed.\n\n' +
     'Assignable: ' + DEVELOPER_SHEET_NAMES.join(', ') + '\n' +
     'Status: ' + ALLOWED.status.join(', ') + '\n\n' +
-    (cleared ? 'Cleared ' + cleared + ' stale rule(s) from columns that should not have one.'
-             : 'No stale rules found.'));
+    (res.cleared ? 'Cleared ' + res.cleared + ' stale rule(s) from columns that should not have one.'
+                 : 'No stale rules found.') +
+    (res.blocked.length
+      ? '\n\nBLOCKED — these tabs are Google Sheets Tables, which refuse validation changes:\n  ' +
+        res.blocked.join(', ') +
+        '\n\nFix: click any cell in the table, open the table menu at its top-left ' +
+        'corner (or right-click > Table), choose "Convert to range", then run this again.'
+      : ''));
 }
 
 // ---------------------------------------------------------------------------
@@ -2122,9 +2221,10 @@ function onOpen() {
   var admin = ui.createMenu('Admin')
     .addItem('Add Team Member Tab', 'addTeamMemberTab')
     .addItem('Check Sheet Alignment', 'verifySheetAlignment')
-    .addItem('Repair Header Row', 'repairHeaders')
+    .addItem('Repair Header Row (headings only)', 'repairHeaders')
     .addItem('Check Attachments Folder', 'checkAttachmentFolder')
     .addItem('Diagnose Dropdowns', 'diagnoseValidation')
+    .addItem('Check Column Alignment (data)', 'diagnoseRowShift')
     .addItem('Convert Time to Hours (once)', 'migrateTimeToHours')
     .addSeparator()
     .addItem('Lock Sheets (protect automated columns)', 'applySheetProtection')
