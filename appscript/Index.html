@@ -433,8 +433,14 @@ function onSubmitResult(result) {
 function onSubmitFailure(error) {
   document.getElementById('loading').style.display = 'none';
   document.getElementById('taskForm').style.display = 'block';
-  showResponse('Task NOT saved: ' + error.message +
-               '\nYour entries are still on the form.', 'error');
+  // A server-side crash can cross google.script.run with no usable message,
+  // so never interpolate it blindly — "Task NOT saved: undefined" helps nobody.
+  var detail = (error && (error.message || error.name)) ? (error.message || error.name)
+                                                        : 'the server did not say why';
+  showResponse('Task NOT saved: ' + detail +
+               '\nYour entries are still on the form. If this keeps happening, ' +
+               'send Venul a screenshot — the reason is in the Apps Script ' +
+               'execution log.', 'error');
 }
 
 function showResponse(msg, type) {

@@ -678,18 +678,38 @@ function processForm(formData) {
  * reports it as a cell reference the submitter cannot act on. Name the real
  * cause instead.
  */
+/**
+ * Never throws. It runs inside a catch block, so a fault here escapes as a bare
+ * TypeError, crosses google.script.run with no .message, and the user is told
+ * "Task NOT saved: undefined" — which says nothing and hides the real cause.
+ * That is exactly what an unguarded cell.match()[0] did.
+ */
 function friendlyWriteError_(error) {
-  var msg = String(error && error.message || error);
-  if (/data validation/i.test(msg)) {
-    var cell = (msg.match(/cell\s+([A-Z]+\d+)/i) || [])[1] || '';
-    var col  = (cell.match(/^[A-Z]+/) || [])[0];
-    var idx  = 0;
-    for (var i = 0; i < col.length; i++) idx = idx * 26 + (col.charCodeAt(i) - 64);
-    var header = MASTER_HEADERS[idx - 1] || ('column ' + col);
-    return 'The sheet is rejecting "' + header + '" because its dropdown is out of date — ' +
-           'it does not yet list everyone on the team. ' +
-           'Ask Venul to run Tracker Options > Admin > Refresh Dropdowns. ' +
-           'Nothing was saved.';
+  var msg;
+  try {
+    msg = (error && error.message) ? String(error.message) : String(error);
+  } catch (e) {
+    msg = 'Unknown error';
+  }
+  if (!msg || msg === 'undefined' || msg === 'null') msg = 'Unknown error';
+
+  try {
+    if (/data validation/i.test(msg)) {
+      var cell = (msg.match(/cell\s+([A-Z]+\d+)/i) || [])[1] || '';
+      var col  = (cell.match(/^[A-Z]+/) || [''])[0];
+      var where = 'one of the columns';
+      if (col) {
+        var idx = 0;
+        for (var i = 0; i < col.length; i++) idx = idx * 26 + (col.charCodeAt(i) - 64);
+        where = '"' + (MASTER_HEADERS[idx - 1] || ('column ' + col)) + '"';
+      }
+      return 'The sheet is rejecting ' + where + ' because a dropdown on it is out of ' +
+             'date — it does not list everyone on the team. Ask Venul to run ' +
+             'Tracker Options > Admin > Refresh Dropdowns. Nothing was saved.\n\n' +
+             'Sheets said: ' + msg;
+    }
+  } catch (e) {
+    return msg;                     // fall back to the raw message rather than failing
   }
   return msg;
 }
