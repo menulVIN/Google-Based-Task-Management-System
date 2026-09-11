@@ -497,7 +497,7 @@ function webFilesReport_() {
     ['Index',            20000],
     ['MyTasks',            300],
     ['Sidebar',            120],
-    ['BulkAdd',          15000]
+    ['BulkAdd',           8000]
   ];
   var lines = ['WEB APP FILES', ''];
   var bad = 0;
@@ -810,12 +810,6 @@ function copyTaskToDevSheet_(ss, row, assignedMember) {
   if (!devSheet) return false;
   devSheet.getRange(getRealLastRow(devSheet) + 1, 1, 1, row.length).setValues([row]);
   return true;
-}
-
-function copyNewTaskToDevSheet(ss, row, assignedMember) {
-  var ok = copyTaskToDevSheet_(ss, row, assignedMember);
-  if (ok) SpreadsheetApp.flush();
-  return ok;
 }
 
 // ---------------------------------------------------------------------------
@@ -1553,6 +1547,23 @@ function verifySheetAlignment() {
  * return a Date, and parseFloat(Date) is NaN — reading it raw would silently
  * reset the task's accumulated hours on every pause.
  */
+/**
+ * Writes decimal hours into the time column and forces the plain-number format.
+ *
+ * A cell left on Sheets' duration format redraws 2.5 as 60:00:00 and, worse,
+ * hands getValue() back a Date. readStoredHours_ then reads that Date as days
+ * and multiplies by 24, so a session banked into a duration-formatted cell
+ * comes back twenty-four times too big and compounds on the next one. Setting
+ * the format on every write makes the round trip lossless whatever the cell
+ * carried before, including rows migrateTimeToHours has never touched.
+ */
+function writeHours_(sheet, row, hours) {
+  if (!sheet || !row) return;
+  var cell = sheet.getRange(row, TOTAL_TIME_COL);
+  cell.setNumberFormat('0.00');
+  cell.setValue(Math.round(hours * 100) / 100);
+}
+
 function applyStatusChange_(masterSheet, masterRow, devSheet, devRow, newStatus, oldStatus) {
   var now = new Date();
   var hourMs = 60 * 60 * 1000;
@@ -1599,7 +1610,8 @@ function applyStatusChange_(masterSheet, masterRow, devSheet, devRow, newStatus,
       }
 
       var previous = readStoredHours_(masterSheet.getRange(masterRow, TOTAL_TIME_COL).getValue());
-      writeBoth(TOTAL_TIME_COL, previous + hrs);
+      writeHours_(masterSheet, masterRow, previous + hrs);
+      if (devSheet && devRow) writeHours_(devSheet, devRow, previous + hrs);
       clearBoth(SESSION_START_COL);
 
       if (note) {
@@ -1701,12 +1713,26 @@ function moveRowOnAssignment(e) {
 
   var rowData = masterSheet.getRange(row, 1, 1, LAST_MASTER_COL).getValues()[0];
 
-  if (e.oldValue && DEVELOPER_SHEET_NAMES.indexOf(e.oldValue) !== -1) {
-    deleteTaskFromDevSheet(e.oldValue, taskId);
+  // Delete-then-copy across two tabs is not atomic. Without the lock a task
+  // submitted at the same moment can land in the sheet mid-move and be dropped
+  // by the delete, or the copy can duplicate a row the form just wrote.
+  var lock = LockService.getScriptLock();
+  try {
+    lock.waitLock(20000);
+  } catch (busy) {
+    Logger.log('moveRowOnAssignment could not lock for ' + taskId + '; the row was not moved.');
+    return;
   }
-  if (e.value && DEVELOPER_SHEET_NAMES.indexOf(e.value) !== -1) {
-    copyTaskToDevSheet_(ss, rowData, e.value);
-    SpreadsheetApp.flush();
+  try {
+    if (e.oldValue && DEVELOPER_SHEET_NAMES.indexOf(e.oldValue) !== -1) {
+      deleteTaskFromDevSheet(e.oldValue, taskId);
+    }
+    if (e.value && DEVELOPER_SHEET_NAMES.indexOf(e.value) !== -1) {
+      copyTaskToDevSheet_(ss, rowData, e.value);
+      SpreadsheetApp.flush();
+    }
+  } finally {
+    lock.releaseLock();
   }
 }
 
@@ -2077,13 +2103,13 @@ function addComment(taskId, body, alsoLogMinutes) {
     if (alsoLogMinutes !== false) {
       var row = findRowInSheet_(masterSheet, taskId);
       var previous = readStoredHours_(masterSheet.getRange(row, TOTAL_TIME_COL).getValue());
-      masterSheet.getRange(row, TOTAL_TIME_COL).setValue(previous + (COMMENT_LOGS_MINUTES / 60));
+      writeHours_(masterSheet, row, previous + (COMMENT_LOGS_MINUTES / 60));
 
       var assigned = String(masterSheet.getRange(row, MASTER_COL_ASSIGNED).getValue()).trim();
       if (DEVELOPER_SHEET_NAMES.indexOf(assigned) !== -1) {
         var dev = ss.getSheetByName(assigned);
         var devRow = dev ? findRowInSheet_(dev, taskId) : null;
-        if (devRow) dev.getRange(devRow, TOTAL_TIME_COL).setValue(previous + (COMMENT_LOGS_MINUTES / 60));
+        if (devRow) writeHours_(dev, devRow, previous + (COMMENT_LOGS_MINUTES / 60));
       }
       logged = COMMENT_LOGS_MINUTES;
     }
