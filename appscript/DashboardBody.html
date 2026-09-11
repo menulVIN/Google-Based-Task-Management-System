@@ -91,6 +91,43 @@
 </div>
 
 <script>
+/**
+ * Show our own failures on the page.
+ *
+ * Apps Script swallows a script error into a jserror beacon that only Google
+ * reads — the page just sits there half-drawn while the network tab fills with
+ * MemoryErrorSender posts. This puts the message where the person who hit it
+ * can actually read it, and where it can be screenshotted.
+ */
+(function () {
+  var shown = 0;
+
+  function report(what, detail) {
+    if (shown >= 3) return;              // one broken frame should not paper the page
+    shown++;
+    var bar = document.createElement('div');
+    bar.setAttribute('role', 'alert');
+    bar.style.cssText =
+      'margin:10px;padding:11px 13px;border-radius:6px;font:12px/1.5 ' +
+      '-apple-system,Segoe UI,Arial,sans-serif;background:#FBECEA;color:#B3261E;' +
+      'border:1px solid #B3261E;border-left:3px solid #B3261E;white-space:pre-wrap;' +
+      'overflow-wrap:anywhere';
+    bar.textContent = 'Dashboard error — send this to Venul\n' + what + '\n' + detail;
+    (document.body || document.documentElement).insertBefore(
+      bar, (document.body || document.documentElement).firstChild);
+  }
+
+  window.addEventListener('error', function (e) {
+    report(e.message || 'Script error',
+           (e.filename || 'inline') + ':' + (e.lineno || '?') + ':' + (e.colno || '?'));
+  });
+
+  window.addEventListener('unhandledrejection', function (e) {
+    var r = e.reason;
+    report('Unhandled promise rejection', (r && (r.message || r)) || 'no detail');
+  });
+})();
+
 var allTasks = [], isManager = false, selected = {}, liveTimer = null;
 var omittedOld = 0, page = 1, perPage = 10, filtered = [];
 var focusId = null, focusThread = null, draftDirty = false;
