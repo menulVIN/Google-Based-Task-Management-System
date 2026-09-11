@@ -1656,14 +1656,22 @@ function onEdit(e) {
   var sheet = e.range.getSheet();
   var sheetName = sheet.getName();
 
-  if (sheetName === MASTER_SHEET_NAME) return;
-  if (DEVELOPER_SHEET_NAMES.indexOf(sheetName) === -1) return;
-
   var editedRow = e.range.getRow();
   var editedCol = e.range.getColumn();
   if (editedRow <= 1) return;
   // e.oldValue is undefined for multi-cell edits, which would corrupt the timer maths.
   if (e.range.getNumRows() > 1 || e.range.getNumColumns() > 1) return;
+
+  // Master is otherwise script-owned, but reassignment is decided here: changing
+  // Assigned Member has to move the task onto the new person's tab, or their
+  // dashboard never shows it. Routed through onEdit rather than a separate
+  // installable trigger so it works the moment this file is saved — an
+  // installable trigger has to be created by hand and is lost on a re-deploy.
+  if (sheetName === MASTER_SHEET_NAME) {
+    if (editedCol === ASSIGNED_MEMBER_COL) moveRowOnAssignment(e);
+    return;
+  }
+  if (DEVELOPER_SHEET_NAMES.indexOf(sheetName) === -1) return;
 
   var masterSheet = e.source.getSheetByName(MASTER_SHEET_NAME);
   var headers = masterSheet.getRange(1, 1, 1, SESSION_START_COL).getValues()[0];
@@ -1697,13 +1705,24 @@ function onEdit(e) {
   if (col) masterSheet.getRange(masterRow, col).setValue(e.value == null ? '' : e.value);
 }
 
-/** Installable trigger on Master. Moves a task between team tabs on reassignment. */
+/**
+ * Moves a task onto the newly assigned person's tab. Called by onEdit when
+ * Assigned Member changes on Master.
+ *
+ * The old holder is looked up in EVERY task tab, archived ones included, so
+ * reassigning a departed member's work actually clears it off their sheet. The
+ * new holder must be a current member — nothing is ever copied to an archive.
+ */
 function moveRowOnAssignment(e) {
   if (!e || !e.range) return;
   var sheet = e.range.getSheet();
   if (sheet.getName() !== MASTER_SHEET_NAME) return;
   if (e.range.getColumn() !== ASSIGNED_MEMBER_COL) return;
   if (e.range.getRow() <= 1) return;
+
+  var from = String(e.oldValue == null ? '' : e.oldValue).trim();
+  var to   = String(e.value    == null ? '' : e.value).trim();
+  if (from === to) return;
 
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var masterSheet = ss.getSheetByName(MASTER_SHEET_NAME);
@@ -1724,13 +1743,20 @@ function moveRowOnAssignment(e) {
     return;
   }
   try {
-    if (e.oldValue && DEVELOPER_SHEET_NAMES.indexOf(e.oldValue) !== -1) {
-      deleteTaskFromDevSheet(e.oldValue, taskId);
+    // Archived tabs are included on the way OUT so a departed member's sheet is
+    // actually cleared, but never on the way IN.
+    if (from && allTaskSheetNames_().indexOf(from) !== -1) {
+      deleteTaskFromDevSheet(from, taskId);
     }
-    if (e.value && DEVELOPER_SHEET_NAMES.indexOf(e.value) !== -1) {
-      copyTaskToDevSheet_(ss, rowData, e.value);
-      SpreadsheetApp.flush();
+    if (to && DEVELOPER_SHEET_NAMES.indexOf(to) !== -1) {
+      // A row already there (a half-finished earlier move, or a manual paste)
+      // would leave the task on two tabs and double-count it.
+      deleteTaskFromDevSheet(to, taskId);
+      copyTaskToDevSheet_(ss, rowData, to);
     }
+    SpreadsheetApp.flush();
+    ss.toast(taskId + ': ' + (from || 'unassigned') + ' → ' + (to || 'unassigned'),
+             'Task moved', 5);
   } finally {
     lock.releaseLock();
   }
