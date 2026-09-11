@@ -311,14 +311,30 @@ function checkInBox(t, cls) {
 }
 
 // ------------------------------------------------------ 1d — focus + thread
+var threadRequest = 0;
+
 function openFocus(taskId, focusComposer) {
   focusId = taskId;
   focusThread = null;
   draftDirty = false;
   renderFocus(focusComposer);
+
+  // Open two tasks quickly and the first reply can land after the second,
+  // painting task A's conversation under task B's heading. Only the newest
+  // request is allowed to write.
+  var mine = ++threadRequest;
   google.script.run
-    .withSuccessHandler(function (r) { focusThread = r.comments || []; renderFocus(focusComposer); })
-    .withFailureHandler(function (e) { focusThread = []; renderFocus(); toast(e.message, 'bad'); })
+    .withSuccessHandler(function (r) {
+      if (mine !== threadRequest) return;
+      focusThread = r.comments || [];
+      renderFocus(focusComposer);
+    })
+    .withFailureHandler(function (e) {
+      if (mine !== threadRequest) return;
+      focusThread = [];
+      renderFocus();
+      toast((e && e.message) ? e.message : 'Could not load the conversation', 'bad');
+    })
     .getTaskThread(taskId);
 }
 

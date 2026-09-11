@@ -18,9 +18,18 @@ import { join, basename, extname } from 'node:path';
 
 const projectDir = process.argv[2];
 if (!projectDir || !existsSync(projectDir)) {
-  console.error('Usage: node dev/build-tokens.mjs <path-to-extracted-project>');
+  console.error('Usage: node dev/build-tokens.mjs <path-to-extracted-project> [--with-font]');
   process.exit(1);
 }
+
+/**
+ * The brand .otf base64s to ~150KB and ships on every single page load, while
+ * the tokens themselves are only 6KB. Axiforma is the wordmark face only and
+ * falls back to Montserrat, which loads from Google Fonts anyway — so it is
+ * left out unless asked for. Pasting 233KB into the Apps Script editor is also
+ * how Tokens ends up truncated, which silently unstyles every page.
+ */
+const WITH_FONT = process.argv.includes('--with-font');
 
 const OUT = 'D:/task-tracker/appscript/Tokens.html';
 
@@ -48,6 +57,10 @@ const fontDir = join(ds, 'assets', 'fonts');
 const fonts = existsSync(fontDir) ? readdirSync(fontDir) : [];
 const fontUris = {};
 for (const f of fonts) {
+  if (!WITH_FONT) {
+    console.log('  skipped font:', f, '(falls back to Montserrat — pass --with-font to inline it)');
+    continue;
+  }
   fontUris[f] = dataUri(join(fontDir, f));
   console.log('  inlined font:', f, '->', Math.round(fontUris[f].length / 1024) + 'KB base64');
 }
@@ -73,8 +86,11 @@ for (const file of ordered) {
   // Point every @font-face at the inlined copy.
   text = text.replace(/url\((['"]?)([^)'"]*?([A-Za-z0-9_-]+\.(?:otf|ttf|woff2?)))\1\)/g,
     (m, _q, _full, fileName) => {
-      if (!fontUris[fileName]) { console.warn('  !! font not found in export:', fileName); return m; }
-      return `url("${fontUris[fileName]}")`;
+      if (fontUris[fileName]) return `url("${fontUris[fileName]}")`;
+      // Not inlined. A relative path is a dead link under Apps Script and the
+      // @font-face would silently fail, so drop the rule and let the stack fall
+      // through to Montserrat rather than leave a broken reference behind.
+      return 'local("__no_such_face__")';
     });
 
   css += `\n/* ===== ${file} ===== */\n${text.trim()}\n`;
@@ -100,6 +116,11 @@ for (const bf of boardFiles) {
     else console.warn('  !! used by the board but defined nowhere:', v);
   }
 }
+
+// Two shades the board uses as plain hexes: readable amber body text, and the
+// grey of a disabled control. Declared here so no component file hardcodes them.
+extras.set('--state-warn-ink', '#7A4A06');
+extras.set('--ink-disabled', '#BFC5BF');
 
 if (extras.size) {
   css += '\n/* ===== state colours — added by the board, not in the design system ===== */\n:root {\n';

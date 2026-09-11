@@ -76,7 +76,7 @@
              border: 1px solid var(--lime-line); }
   .error   { background: var(--state-stop-soft); color: var(--state-stop);
              border: 1px solid var(--state-stop); }
-  .warn    { background: var(--state-warn-soft); color: #7A4A06;
+  .warn    { background: var(--state-warn-soft); color: var(--state-warn-ink);
              border: 1px solid var(--state-warn-line); }
 
   #drop-zone { border: 1.5px dashed var(--line-200); border-radius: var(--radius-md);
@@ -219,8 +219,9 @@
 
     <label for="paste-area">Additional Links / Pasted Screenshots</label>
     <div id="paste-area" contenteditable="true"
-         style="min-height:80px; padding:10px; margin-bottom:15px; border:1px solid #ccc;
-                border-radius:5px; background:#fff; overflow:auto;"></div>
+         style="min-height:80px; padding:var(--space-3); margin-bottom:var(--space-4);
+                border:1px solid var(--line-200); border-radius:var(--radius-sm);
+                background:var(--white); overflow:auto;"></div>
 
     <div class="section-header">Classification &amp; Urgency</div>
     <div class="form-row">
