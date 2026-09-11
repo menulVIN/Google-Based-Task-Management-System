@@ -481,8 +481,70 @@ function formatTaskId_(n) { return 'TASK-' + String(n).padStart(3, '0'); }
  * ?page=mytasks  → personal dashboard, usable without opening the spreadsheet
  * anything else  → new task submission form
  */
+/**
+ * Every HTML partial the web pages depend on, with the size Apps Script sees.
+ *
+ * A page that renders blank is almost never a code fault — it is a partial that
+ * was never pasted, or one the editor truncated on paste. Sizes make that
+ * obvious: DashboardBody is tens of KB, so a few hundred bytes means truncated
+ * and "MISSING" means the file is not in the project at all.
+ */
+function webFilesReport_() {
+  var expect = [
+    ['Tokens',           60000],
+    ['DashboardStyles',  20000],
+    ['DashboardBody',    28000],
+    ['Index',            20000],
+    ['MyTasks',            300],
+    ['Sidebar',            120],
+    ['BulkAdd',          15000]
+  ];
+  var lines = ['WEB APP FILES', ''];
+  var bad = 0;
+
+  for (var i = 0; i < expect.length; i++) {
+    var name = expect[i][0], floor = expect[i][1], size = -1, err = '';
+    try {
+      size = HtmlService.createHtmlOutputFromFile(name).getContent().length;
+    } catch (e) {
+      err = String(e && e.message ? e.message : e);
+    }
+    var verdict;
+    if (err)            { verdict = 'MISSING — not in this project'; bad++; }
+    else if (size < floor) { verdict = 'TOO SMALL — paste was truncated'; bad++; }
+    else                   { verdict = 'ok'; }
+    lines.push(pad_(name, 18) + (err ? '     —' : pad_(fmtKb_(size), 10)) + verdict);
+  }
+
+  lines.push('');
+  lines.push(bad
+    ? bad + ' file(s) need re-pasting. Copy the whole file, select all in the '
+          + 'Apps Script editor (Ctrl+A) and paste over it, then Deploy > New version.'
+    : 'All files present and full size. If a page is still blank, the deployment '
+      + 'is serving an older version — Deploy > Manage deployments > edit > New version.');
+  return lines.join(String.fromCharCode(10));
+}
+
+function pad_(s, n) { s = String(s); while (s.length < n) s += ' '; return s; }
+function fmtKb_(n)  { return n < 1024 ? n + ' B' : Math.round(n / 1024) + ' KB'; }
+
+/** Admin > Check Web App Files. */
+function checkWebFiles() {
+  SpreadsheetApp.getUi().alert('Check Web App Files', webFilesReport_(),
+    SpreadsheetApp.getUi().ButtonSet.OK);
+}
+
 function doGet(e) {
   var page  = (e && e.parameter && e.parameter.page) || 'submit';
+
+  // ?page=diag renders nothing but a plain-text report of what the project
+  // actually contains. If a page comes up blank, this says whether a partial
+  // is missing, truncated, or simply was never pasted.
+  if (page === 'diag') {
+    return ContentService.createTextOutput(webFilesReport_())
+      .setMimeType(ContentService.MimeType.TEXT);
+  }
+
   var file  = (page === 'mytasks') ? 'MyTasks' : 'Index';
   var title = (page === 'mytasks') ? 'My Tasks' : 'New Task Submission';
 
@@ -2245,6 +2307,7 @@ function onOpen() {
     .addItem('Check Attachments Folder', 'checkAttachmentFolder')
     .addItem('Diagnose Dropdowns', 'diagnoseValidation')
     .addItem('Check Column Alignment (data)', 'diagnoseRowShift')
+    .addItem('Check Web App Files', 'checkWebFiles')
     .addItem('Convert Time to Hours (once)', 'migrateTimeToHours')
     .addSeparator()
     .addItem('Lock Sheets (protect automated columns)', 'applySheetProtection')
