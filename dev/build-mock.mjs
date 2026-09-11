@@ -20,13 +20,13 @@ const SAMPLE = [
     assignedMember:'Eshani', status:'Paused', priority:'High', timeSpentHrs:1.75,
     deadlineStr:'12/09/2026 5:00 PM', isOverdue:false, hoursOvertime:null, hoursRemaining:70, isLive:false },
   { taskId:'TASK-2479', date:'08/09/2026', summary:'Update backend project to suit HNB payment gateway', client:'Flute Mansion', module:'IBE',
-    assignedMember:'Isura', status:'Blocked', priority:'High', timeSpentHrs:5.5,
+    assignedMember:'Isura', status:'On Hold', priority:'High', timeSpentHrs:5.5,
     deadlineStr:'10/09/2026 5:00 PM', isOverdue:false, hoursOvertime:null, hoursRemaining:26, isLive:false },
   { taskId:'TASK-2461', date:'08/09/2026', summary:'Sheet protection for automated columns \"quoted\" & <tagged>', client:'Task Management Application', module:'General',
     assignedMember:'Senura', status:'Done', priority:'Low', timeSpentHrs:5.25,
     deadlineStr:'08/09/2026 5:00 PM', isOverdue:false, hoursOvertime:null, hoursRemaining:null, isLive:false },
   { taskId:'TASK-2455', date:'07/09/2026', summary:'Agoda connection to the channel manager', client:'Sigiriya Bliss Hotel', module:'CM',
-    assignedMember:'Janith', status:'New', priority:'Medium', timeSpentHrs:0,
+    assignedMember:'Janith', status:'Awaiting Info', priority:'Medium', timeSpentHrs:0,
     deadlineStr:'11/09/2026 5:00 PM', isOverdue:false, hoursOvertime:null, hoursRemaining:50, isLive:false }
 ];
 

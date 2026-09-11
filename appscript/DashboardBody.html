@@ -10,26 +10,26 @@
     <h1>My Tasks</h1>
     <div class="sub" id="who">&nbsp;</div>
   </div>
-  <button class="btn btn-quiet" id="btn-bulk" type="button">Bulk add</button>
-  <button class="btn btn-quiet" type="button" onclick="loadTasks()">Refresh</button>
-  <a class="btn btn-primary" id="btn-new" href="?page=submit" style="text-decoration:none">New task</a>
+  <button class="btn btn-quiet" id="btn-bulk" type="button" title="Import many tasks at once from a tab-separated block">Bulk add</button>
+  <button class="btn btn-quiet" type="button" onclick="loadTasks()" title="Reload from the sheet">Refresh</button>
+  <a class="btn btn-primary" id="btn-new" href="?page=submit" style="text-decoration:none" title="Open the task request form">New task</a>
 </div>
 
 <div class="stats">
-  <button class="stat s-open"    type="button" onclick="filterByStatus('all')"         id="stat-all">
+  <button class="stat s-open"    type="button" onclick="filterByStatus('all')"         id="stat-all" title="Everything not finished. Click to clear the status filter">
     <span class="stat-n" id="count-all">—</span><span class="stat-l">Open</span></button>
-  <button class="stat s-active"  type="button" onclick="filterByStatus('In Progress')" id="stat-inprogress">
+  <button class="stat s-active"  type="button" onclick="filterByStatus('In Progress')" id="stat-inprogress" title="Timers running right now">
     <span class="stat-n" id="count-inprogress">—</span><span class="stat-l">Active</span></button>
-  <button class="stat s-paused"  type="button" onclick="filterByStatus('Paused')"      id="stat-paused">
+  <button class="stat s-paused"  type="button" onclick="filterByStatus('Paused')"      id="stat-paused" title="Started, then stopped. Time is banked">
     <span class="stat-n" id="count-paused">—</span><span class="stat-l">Paused</span></button>
-  <button class="stat s-overdue" type="button" onclick="filterByStatus('overdue')"     id="stat-overdue">
+  <button class="stat s-overdue" type="button" onclick="filterByStatus('overdue')"     id="stat-overdue" title="Past the deadline and not finished">
     <span class="stat-n" id="count-overdue">—</span><span class="stat-l">Overdue</span></button>
 </div>
 
 <div class="filters">
   <div class="field grow">
     <label for="search">Search</label>
-    <input id="search" placeholder="Task, client or ID" oninput="applyFilters()">
+    <input id="search" placeholder="Task, client or ID" oninput="applyFilters()" title="Matches the summary, the client or the task id">
   </div>
   <div class="field fixed">
     <label for="filter-status">Status</label>
@@ -50,21 +50,22 @@
     <select id="filter-developer" onchange="applyFilters()"><option value="all">Everyone</option></select>
   </div>
   <label class="tick" for="include-finished">
-    <input type="checkbox" id="include-finished" onchange="loadTasks()">
+    <input type="checkbox" id="include-finished" onchange="loadTasks()" title="Also load tasks finished more than 30 days ago. Slower">
     <span>Include old finished</span>
   </label>
-  <a class="open-full" id="open-full" href="#" target="_blank" rel="noopener" hidden>Open full page</a>
+  <a class="open-full" id="open-full" href="#" target="_blank" rel="noopener" hidden title="Open the full-width dashboard in a browser tab">Open full page</a>
+    <span class="filter-hint"><span class="kbd">/</span> search · <span class="kbd">Esc</span> clear</span>
 </div>
 
 <div class="bulkbar" id="bulkbar">
   <span class="count" id="bulk-count">0 selected</span>
   <div class="bulk-actions">
-    <button class="bulk-btn" type="button" onclick="bulkAction('In Progress')">Start</button>
-    <button class="bulk-btn" type="button" onclick="bulkAction('Paused')">Pause</button>
+    <button class="bulk-btn" type="button" onclick="bulkAction('In Progress')" title="Start the timer on every selected task">Start</button>
+    <button class="bulk-btn" type="button" onclick="bulkAction('Paused')" title="Pause every selected task and bank the time">Pause</button>
     <button class="bulk-btn" type="button" id="bulk-reassign" disabled
             title="Reassign needs a backend change — not wired yet">Reassign</button>
-    <button class="bulk-btn go" type="button" onclick="bulkAction('Done')">Mark Done</button>
-    <button class="bulk-btn clear" type="button" onclick="clearSelection()">Clear</button>
+    <button class="bulk-btn go" type="button" onclick="bulkAction('Done')" title="Finish every selected task">Mark Done</button>
+    <button class="bulk-btn clear" type="button" onclick="clearSelection()" title="Deselect everything">Clear</button>
   </div>
 </div>
 
@@ -184,6 +185,13 @@ function onLoaded(res) {
       });
     }
     el('dev-field').hidden = false;
+    // The saved assignee can only be applied once the list exists.
+    if (pendingDev) {
+      if (Array.prototype.some.call(f.options, function (o) { return o.value === pendingDev; })) {
+        f.value = pendingDev;
+      }
+      pendingDev = null;
+    }
   }
 
   updateStats();
@@ -519,9 +527,16 @@ function renderGrid() {
     chk.checked = !!selected[t.taskId];
     chk.onchange = function () { toggleSelect(chk.checked, t.taskId, card); };
     var main = node('div', 'card-main');
-    main.appendChild(node('span', 'card-id', t.taskId + ' · ' + t.date));
-    main.appendChild(node('span', 'card-sum', t.summary));
-    main.appendChild(node('span', 'card-where', t.client + (t.module ? ' · ' + t.module : '')));
+    var idEl = node('span', 'card-id', t.taskId + ' · ' + t.date);
+    idEl.title = 'Click to copy ' + t.taskId;
+    idEl.onclick = function () { copyId(t.taskId, idEl); };
+    main.appendChild(idEl);
+    var sum = node('span', 'card-sum', t.summary);
+    sum.title = t.summary;                       // full text on hover when clamped
+    main.appendChild(sum);
+    var where = node('span', 'card-where', t.client + (t.module ? ' · ' + t.module : ''));
+    where.title = 'Client: ' + t.client + (t.module ? '\nModule: ' + t.module : '');
+    main.appendChild(where);
     top.appendChild(chk); top.appendChild(main);
 
     var meta = node('div', 'card-meta');
@@ -541,14 +556,23 @@ function renderGrid() {
     var time = node('span', 'card-time' + (t.isLive ? ' live' : ''), hhmm(t.timeSpentHrs));
     time.dataset.base = t.timeSpentHrs;
     time.dataset.live = t.isLive ? '1' : '0';
+    time.title = t.isLive ? 'Running now — total time logged on this task'
+                          : 'Total time logged on this task';
     meta.appendChild(time);
 
     var acts = node('div', 'card-actions');
-    acts.appendChild(actBtn('Start', 'go',  t, 'In Progress', t.status === 'In Progress' || t.status === 'Done'));
-    acts.appendChild(actBtn('Pause', '',    t, 'Paused',      t.status !== 'In Progress'));
-    acts.appendChild(actBtn('Done',  '',    t, 'Done',        t.status === 'Done'));
+    acts.appendChild(actBtn('Start', 'go',  t, 'In Progress', t.status === 'In Progress' || t.status === 'Done',
+      t.status === 'Done' ? 'Already finished' : t.status === 'In Progress' ? 'Already running'
+                          : 'Start the timer and set this to In Progress'));
+    acts.appendChild(actBtn('Pause', '',    t, 'Paused',      t.status !== 'In Progress',
+      t.status !== 'In Progress' ? 'Only a running task can be paused'
+                                 : 'Stop the timer and bank the time so far'));
+    acts.appendChild(actBtn('Done',  '',    t, 'Done',        t.status === 'Done',
+      t.status === 'Done' ? 'Already finished'
+                          : 'Finish it — banks the time and stamps the completion date'));
     var notes = node('button', 'act notes', 'Notes');
-    notes.title = 'Open the conversation for ' + t.taskId;
+    notes.title = 'Open the conversation for ' + t.taskId +
+                  ' — posting an update logs 15 minutes against it';
     notes.onclick = function () { openFocus(t.taskId); };
     acts.appendChild(notes);
 
@@ -557,11 +581,38 @@ function renderGrid() {
   });
 }
 
-function actBtn(label, extra, t, status, disabled) {
+function actBtn(label, extra, t, status, disabled, why) {
   var b = node('button', 'act ' + extra, label);
   b.disabled = disabled;
+  // A disabled control should say why it is disabled, not just look dead.
+  if (why) b.title = why;
   if (!disabled) b.onclick = function () { setStatus(t.taskId, status, b); };
   return b;
+}
+
+/** Task ids get pasted into chats and commits constantly. One click. */
+function copyId(taskId, el) {
+  function flash() {
+    var was = el.textContent;
+    el.textContent = taskId + ' · copied';
+    el.classList.add('copied');
+    setTimeout(function () { el.textContent = was; el.classList.remove('copied'); }, 1200);
+  }
+  try {
+    navigator.clipboard.writeText(taskId).then(flash, function () { fallback(); });
+  } catch (e) { fallback(); }
+
+  function fallback() {
+    // Clipboard API is blocked in some embedded frames; select-and-copy still works.
+    var ta = document.createElement('textarea');
+    ta.value = taskId;
+    ta.style.cssText = 'position:fixed;opacity:0';
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); flash(); }
+    catch (err) { toast('Could not copy — the id is ' + taskId, 'bad'); }
+    ta.remove();
+  }
 }
 
 // ---------------------------------------------------------------- pagination
@@ -614,16 +665,47 @@ function renderPager() {
 }
 
 // -------------------------------------------------------------- status write
+/**
+ * The work shows on the card, not behind a full-screen overlay — a status
+ * change is one cell and should not block the board. A failure stays attached
+ * to the card that caused it, with a retry, instead of a toast that vanishes.
+ */
 function setStatus(taskId, status, btn) {
-  btn.disabled = true;
-  showOverlay(taskId + ' → ' + status + '…');
+  var card = btn.closest('.card');
+  var prevLabel = btn.textContent;
+
+  btn.classList.add('working');
+  if (card) {
+    card.classList.add('busy');
+    var old = card.querySelector('.card-error');
+    if (old) old.remove();
+  }
+
+  function done() {
+    btn.classList.remove('working');
+    btn.textContent = prevLabel;
+    if (card) card.classList.remove('busy');
+  }
+
+  function fail(reason) {
+    done();
+    if (!card) { toast(reason, 'bad'); return; }
+    var box = node('div', 'card-error');
+    box.appendChild(node('span', null, reason));
+    var again = node('button', null, 'Retry');
+    again.onclick = function () { box.remove(); setStatus(taskId, status, btn); };
+    box.appendChild(again);
+    card.appendChild(box);
+  }
+
   google.script.run
     .withSuccessHandler(function (r) {
-      hideOverlay();
-      if (r && r.success) { toast(taskId + ' → ' + status, 'ok'); loadTasks(); }
-      else { toast((r && r.error) || 'Update failed', 'bad'); btn.disabled = false; }
+      if (r && r.success) { done(); toast(taskId + ' → ' + status, 'ok'); loadTasks(); }
+      else fail((r && r.error) || 'The update did not go through.');
     })
-    .withFailureHandler(function (e) { hideOverlay(); toast(e.message, 'bad'); btn.disabled = false; })
+    .withFailureHandler(function (e) {
+      fail((e && e.message) ? e.message : 'The server did not respond.');
+    })
     .updateStatusFromSidebar(taskId, status);
 }
 
@@ -685,5 +767,64 @@ function toast(msg, kind) {
   toastTimer = setTimeout(function () { t.className = 'toast'; }, 3500);
 }
 
+// ------------------------------------------------------------- ease of use
+/**
+ * Filters survive a reload. People open this sidebar dozens of times a day, and
+ * re-picking "Eshani / Overdue" every single time is the kind of small tax that
+ * stops a tool getting used. Wrapped because storage throws in some frames.
+ */
+var FILTER_KEY = 'tracker_filters_v1';
+
+function saveFilters() {
+  try {
+    localStorage.setItem(FILTER_KEY, JSON.stringify({
+      status: el('filter-status').value,
+      dev:    el('filter-developer').value,
+      old:    el('include-finished').checked,
+      per:    perPage
+    }));
+  } catch (e) { /* private window — filters simply will not persist */ }
+}
+
+function restoreFilters() {
+  try {
+    var f = JSON.parse(localStorage.getItem(FILTER_KEY) || '{}');
+    if (f.status) el('filter-status').value = f.status;
+    if (typeof f.old === 'boolean') el('include-finished').checked = f.old;
+    if (f.per) perPage = f.per;
+    return f.dev || null;          // assignee list is not built until data lands
+  } catch (e) { return null; }
+}
+
+['filter-status', 'filter-developer', 'include-finished'].forEach(function (id) {
+  el(id).addEventListener('change', saveFilters);
+});
+
+/**
+ * "/" jumps to search. Escape backs out one level at a time — it clears a
+ * search before closing anything, so it never destroys more than you expect.
+ */
+document.addEventListener('keydown', function (e) {
+  var typing = /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName || '');
+
+  if (e.key === '/' && !typing) {
+    e.preventDefault();
+    el('search').focus();
+    el('search').select();
+    return;
+  }
+
+  if (e.key === 'Escape') {
+    if (el('scrim').classList.contains('visible')) { el('dlg-cancel').click(); return; }
+    if (typing && e.target.id === 'search' && e.target.value) {
+      e.target.value = ''; page = 1; applyFilters(); return;
+    }
+    if (el('search').value) { el('search').value = ''; page = 1; applyFilters(); return; }
+    if (Object.keys(selected).length) { clearSelection(); return; }
+    if (focusId) closeFocus();
+  }
+});
+
+var pendingDev = restoreFilters();
 loadTasks();
 </script>
