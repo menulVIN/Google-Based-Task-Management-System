@@ -11,7 +11,7 @@
     <div class="sub" id="who">&nbsp;</div>
   </div>
   <button class="btn btn-quiet" id="btn-bulk" type="button" title="Import many tasks at once from a tab-separated block">Bulk add</button>
-  <button class="btn btn-quiet" type="button" onclick="loadTasks()" title="Reload from the sheet">Refresh</button>
+  <button class="btn btn-quiet" type="button" onclick="loadTasks(this)" title="Reload from the sheet">Refresh</button>
   <a class="btn btn-primary" id="btn-new" href="?page=submit" style="text-decoration:none" title="Open the task request form">New task</a>
 </div>
 
@@ -60,11 +60,11 @@
 <div class="bulkbar" id="bulkbar">
   <span class="count" id="bulk-count">0 selected</span>
   <div class="bulk-actions">
-    <button class="bulk-btn" type="button" onclick="bulkAction('In Progress')" title="Start the timer on every selected task">Start</button>
-    <button class="bulk-btn" type="button" onclick="bulkAction('Paused')" title="Pause every selected task and bank the time">Pause</button>
+    <button class="bulk-btn" type="button" onclick="bulkAction('In Progress', this)" title="Start the timer on every selected task">Start</button>
+    <button class="bulk-btn" type="button" onclick="bulkAction('Paused', this)" title="Pause every selected task and bank the time">Pause</button>
     <button class="bulk-btn" type="button" id="bulk-reassign" disabled
             title="Reassign needs a backend change — not wired yet">Reassign</button>
-    <button class="bulk-btn go" type="button" onclick="bulkAction('Done')" title="Finish every selected task">Mark Done</button>
+    <button class="bulk-btn go" type="button" onclick="bulkAction('Done', this)" title="Finish every selected task">Mark Done</button>
     <button class="bulk-btn clear" type="button" onclick="clearSelection()" title="Deselect everything">Clear</button>
   </div>
 </div>
@@ -179,11 +179,28 @@ function showSkeleton() {
 }
 function hideSkeleton() { el('skeleton').hidden = true; el('grid').hidden = false; }
 
-function loadTasks() {
+/**
+ * A refresh clicked while one is already running does nothing. Refreshes that
+ * start on their own — after a status change or a post — can still overlap a
+ * clicked one, so only the newest request is allowed to paint the board:
+ * otherwise a slow older reply lands last and shows data from before the write.
+ */
+var loadSeq = 0;
+function loadTasks(btn) {
+  var done = btn ? withLoader(btn) : function () {};
+  if (!done) return;
+
+  var mine = ++loadSeq;
   if (firstLoad) showSkeleton(); else showOverlay('Refreshing…');
   google.script.run
-    .withSuccessHandler(onLoaded)
+    .withSuccessHandler(function (res) {
+      done();
+      if (mine !== loadSeq) return;
+      onLoaded(res);
+    })
     .withFailureHandler(function (e) {
+      done();
+      if (mine !== loadSeq) return;
       hideOverlay(); hideSkeleton(); firstLoad = false;
       toast('Could not load tasks: ' + e.message, 'bad');
     })
@@ -339,8 +356,8 @@ function checkInBox(t, cls) {
   addNote.onclick = function () { openFocus(t.taskId, true); };
   var keep = node('button', null, 'Yes, keep running');
   keep.onclick = function () {
-    postComment(t.taskId, 'Still working on this.', false, function () {
-      toast('Noted — timer keeps running', 'ok');
+    postComment(t.taskId, 'Still working on this.', false, keep, function (ok) {
+      if (ok) toast('Noted — timer keeps running', 'ok');
     });
   };
   b.appendChild(addNote); b.appendChild(keep);
@@ -388,6 +405,75 @@ function closeFocus() {
   }
   focusId = null;
   renderFocus();
+}
+
+/**
+ * The request itself: what was asked for, the developer's own note, who
+ * reported it, and the files attached when it was raised.
+ *
+ * Attachments are stored as one Drive URL per line, mixed with whatever the
+ * submitter typed into the links box, so each line is a link when it looks
+ * like one and plain text otherwise. Built with textContent throughout —
+ * every value here is somebody's free text.
+ */
+function detailBlock(t) {
+  var rows = [];
+  if (t.remarks)    rows.push(['What was asked', t.remarks]);
+  if (t.devRemarks) rows.push(['Developer note', t.devRemarks]);
+  if (t.reporter)   rows.push(['Reported by', t.reporter]);
+
+  var links = attachmentList(t.attachments);
+  if (!rows.length && !links.length) return null;
+
+  var wrap = node('div', 'detail');
+  wrap.appendChild(node('div', 'section-label', 'Request'));
+
+  rows.forEach(function (r) {
+    var line = node('div', 'detail-row');
+    line.appendChild(node('div', 'detail-k', r[0]));
+    line.appendChild(node('div', 'detail-v', r[1]));
+    wrap.appendChild(line);
+  });
+
+  if (links.length) {
+    var line2 = node('div', 'detail-row');
+    line2.appendChild(node('div', 'detail-k',
+      'Attachments (' + links.length + ')'));
+    var box = node('div', 'detail-v');
+    links.forEach(function (item) {
+      if (item.url) {
+        var a = document.createElement('a');
+        a.className = 'attach';
+        a.href = item.url;
+        a.target = '_blank';
+        a.rel = 'noopener';
+        a.title = item.url;
+        a.textContent = item.label;
+        box.appendChild(a);
+      } else {
+        box.appendChild(node('span', 'attach plain', item.label));
+      }
+    });
+    line2.appendChild(box);
+    wrap.appendChild(line2);
+  }
+  return wrap;
+}
+
+/** One entry per non-empty line; {url,label} when the line is a link. */
+function attachmentList(raw) {
+  if (!raw) return [];
+  return String(raw).split(/[\r\n,]+/)
+    .map(function (l) { return l.trim(); })
+    .filter(function (l) { return l.length > 0; })
+    .map(function (l) {
+      if (!/^https?:\/\//i.test(l)) return { url: '', label: l };
+      // A Drive URL is unreadable in full; its file id says nothing either.
+      var label = /drive\.google\.com|docs\.google\.com/.test(l)
+        ? 'Drive file'
+        : l.replace(/^https?:\/\//i, '').split('/')[0];
+      return { url: l, label: label };
+    });
 }
 
 function renderFocus(focusComposer) {
@@ -445,6 +531,13 @@ function renderFocus(focusComposer) {
   if (t.needsCheckIn) box.appendChild(checkInBox(t, 'checkin-band'));
 
   var body = node('div', 'focus-body');
+
+  // What the requester actually wrote, and anything they attached. All of this
+  // was already on the row and none of it ever reached the board, so a task
+  // could only be understood by opening the spreadsheet.
+  var details = detailBlock(t);
+  if (details) body.appendChild(details);
+
   body.appendChild(node('div', 'section-label', 'Conversation'));
 
   if (focusThread === null) {
@@ -486,8 +579,13 @@ function renderFocus(focusComposer) {
   post.onclick = function () {
     var text = ta.value.trim();
     if (!text) return;
-    post.disabled = true;
-    postComment(t.taskId, text, true, function () { ta.value = ''; draftDirty = false; });
+    ta.readOnly = true;                 // what gets posted is what was typed
+    var started = postComment(t.taskId, text, true, post, function (ok) {
+      ta.readOnly = false;
+      if (ok) { ta.value = ''; draftDirty = false; }
+      post.disabled = !draftDirty;      // a failed post can be retried as it stands
+    });
+    if (!started) ta.readOnly = false;
   };
   foot.appendChild(post);
   comp.appendChild(foot);
@@ -500,19 +598,39 @@ function renderFocus(focusComposer) {
   if (focusComposer) ta.focus();
 }
 
-function postComment(taskId, body, logTime, done) {
-  showOverlay('Posting…');
+/**
+ * Posting shows on the button that was pressed rather than behind a
+ * full-screen overlay — it writes one row, and the board should stay readable
+ * while it goes. The button's neighbours are locked with it.
+ *
+ * after(ok) runs once the request settles either way. It runs after the
+ * "Posted" toast, so a caller's own message is the one left on screen.
+ * Returns false when that button was already posting.
+ */
+function postComment(taskId, body, logTime, btn, after) {
+  var done = withLoader(btn, btn.parentNode);
+  if (!done) return false;
+
   google.script.run
     .withSuccessHandler(function (r) {
-      hideOverlay();
-      if (!r || !r.success) { toast((r && r.error) || 'Could not post', 'bad'); return; }
+      done();
+      if (!r || !r.success) {
+        toast((r && r.error) || 'Could not post', 'bad');
+        if (after) after(false);
+        return;
+      }
       focusThread = r.thread || focusThread;
-      if (done) done();
       toast(r.loggedMinutes ? 'Posted · ' + r.loggedMinutes + ' minutes logged' : 'Posted', 'ok');
+      if (after) after(true);
       loadTasks();
     })
-    .withFailureHandler(function (e) { hideOverlay(); toast(e.message, 'bad'); })
+    .withFailureHandler(function (e) {
+      done();
+      toast((e && e.message) ? e.message : 'Could not post — the server did not respond', 'bad');
+      if (after) after(false);
+    })
     .addComment(taskId, body, logTime);
+  return true;
 }
 
 // ------------------------------------------------------- 1e — confirm dialog
@@ -725,9 +843,13 @@ function renderPager() {
  */
 function setStatus(taskId, status, btn) {
   var card = btn.closest('.card');
-  var prevLabel = btn.textContent;
 
-  btn.classList.add('working');
+  // Lock the pressed button's neighbours too. On a card that is the card; in
+  // the focus panel it is the action row — which used to stay live, so Pause
+  // and Mark Done could both be fired while the first was still writing.
+  var endLoader = withLoader(btn, card || btn.closest('.focus-actions'));
+  if (!endLoader) return;
+
   if (card) {
     card.classList.add('busy');
     var old = card.querySelector('.card-error');
@@ -735,8 +857,7 @@ function setStatus(taskId, status, btn) {
   }
 
   function done() {
-    btn.classList.remove('working');
-    btn.textContent = prevLabel;
+    endLoader();
     if (card) card.classList.remove('busy');
   }
 
@@ -777,12 +898,15 @@ function clearSelection() {
   renderGrid();
 }
 
-function bulkAction(status) {
+function bulkAction(status, btn) {
   var ids = Object.keys(selected);
   if (!ids.length) return;
+  var done = withLoader(btn, el('bulkbar'));
+  if (!done) return;
   showOverlay('Updating ' + ids.length + ' task(s)…');
   google.script.run
     .withSuccessHandler(function (r) {
+      done();
       hideOverlay();
       if (!r || !r.success) { toast((r && r.error) || 'Bulk update failed', 'bad'); return; }
       toast('Updated ' + r.updated + ' → ' + status + (r.failed ? ' · ' + r.failed + ' failed' : ''),
@@ -791,7 +915,11 @@ function bulkAction(status) {
       el('bulkbar').classList.remove('visible');
       loadTasks();
     })
-    .withFailureHandler(function (e) { hideOverlay(); toast(e.message, 'bad'); })
+    .withFailureHandler(function (e) {
+      done();
+      hideOverlay();
+      toast((e && e.message) ? e.message : 'Bulk update failed — the server did not respond', 'bad');
+    })
     .bulkUpdateStatusFromSidebar(ids, status);
 }
 

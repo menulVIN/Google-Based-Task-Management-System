@@ -1,0 +1,826 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <meta name="design_doc_mode" content="canvas">
+  <link rel="stylesheet" href="_ds/onesapro-design-system-c70b458d-3278-481a-b36d-28e36dd68fed/tokens/fonts.css">
+  <link rel="stylesheet" href="_ds/onesapro-design-system-c70b458d-3278-481a-b36d-28e36dd68fed/tokens/colors.css">
+  <link rel="stylesheet" href="_ds/onesapro-design-system-c70b458d-3278-481a-b36d-28e36dd68fed/tokens/typography.css">
+  <link rel="stylesheet" href="_ds/onesapro-design-system-c70b458d-3278-481a-b36d-28e36dd68fed/tokens/spacing.css">
+  <link rel="stylesheet" href="_ds/onesapro-design-system-c70b458d-3278-481a-b36d-28e36dd68fed/styles.css">
+  <script src="_ds/onesapro-design-system-c70b458d-3278-481a-b36d-28e36dd68fed/_ds_bundle.js"></script>
+<style>
+/* Board chrome only — product surfaces are inline-styled, per DC rules.
+   FLAGGED ADDITION: the OneSapro palette is all greens and has no warning,
+   danger or blocked hue. A tracker cannot signal "overdue" in green, so three
+   state colours are declared here, desaturated to sit beside the brand greens. */
+:root{
+  --state-warn:#B26B00; --state-warn-soft:#FBF1E0; --state-warn-line:#EFDFC2;
+  --state-stop:#B3261E; --state-stop-soft:#FBECEA;
+  --lime-line:#D3E9AE;
+}
+body{margin:0;background:var(--green-wash);font-family:"DM Sans",system-ui,-apple-system,"Segoe UI",sans-serif;overflow-x:hidden}
+a{color:var(--green-medium)}a:hover{color:var(--green-primary)}
+.dv-turn{padding:36px clamp(16px,2.4vw,44px) 30px;border-bottom:1px solid var(--line-200);scroll-margin-top:16px}
+.dv-thd{display:flex;align-items:baseline;gap:10px;margin:0 0 16px;flex-wrap:wrap}
+.dv-tid{font:600 10px ui-monospace,Menlo,monospace;padding:3px 7px;background:var(--charcoal);color:#fff;border-radius:4px;text-decoration:none}
+.dv-tname{font:700 14px/1.2 Montserrat,system-ui,sans-serif;color:var(--charcoal)}
+.dv-opts{display:flex;flex-direction:column;gap:36px}
+.dv-opt{display:flex;flex-direction:column;gap:10px;scroll-margin-top:16px;min-width:0}
+.dv-oid{font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:var(--lime-soft);color:var(--green-primary);border-radius:5px;text-decoration:none}
+.dv-olabel{display:flex;align-items:baseline;gap:8px;font:400 12px/1.45 "DM Sans",system-ui,sans-serif;color:var(--ink-400);flex-wrap:wrap}
+.dv-card{width:100%;max-width:2048px;min-width:0;background:#fff;border:1px solid var(--line-200);border-radius:14px;box-shadow:0 2px 12px rgba(29,93,75,.08);overflow:hidden}
+.dv-opt:target .dv-oid{background:var(--green-primary);color:#fff}
+.dv-next{margin:24px 0 0;font:12.5px/1.7 "DM Sans",system-ui,sans-serif;color:var(--ink-400)}
+.dv-note{margin:0 0 22px;max-width:1120px;font:13.5px/1.75 "DM Sans",system-ui,sans-serif;color:var(--ink-600)}
+.dv-note b{color:var(--charcoal);font-weight:600}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.28}}
+</style></helmet>
+
+<section class="dv-turn" id="t1">
+  <div class="dv-thd"><a class="dv-tid" href="#t1">1</a><span class="dv-tname">My Tasks dashboard — four directions</span></div>
+  <p class="dv-note">Every direction keeps what you marked non-negotiable — <b>Start / Pause / Done on the card, bulk select, live timer, the four stat tiles, include-old-finished</b> — and swaps the 150-card cap for real pagination. All four pin the running task to the top and add the collaboration you asked for: a <b>comment thread</b>, an <b>activity log</b>, <b>@mentions</b>, visible <b>attachments</b> and the <b>4-hour “still on this?”</b> nudge. Layouts are fluid from <b>1280 to 2048</b> — <code>auto-fit</code> card tracks, <code>fr</code> table columns, nothing scrolls sideways. Brand is OneSapro: primary green surfaces, lime as the single accent, Montserrat headings on DM Sans. Your FE standards hold — one filled primary per surface, plain-text page heading, <b>DD/MM/YYYY</b>, <b>“Showing X–Y of Z records”</b> with 10 / 25 / 50, colour always paired with a word, no icon-only buttons. <a href="#1e">1e</a> carries the shared states, including the <b>isDirty</b> discard confirm.</p>
+  <div class="dv-opts">
+
+    <!-- ================================================= 1a — dense grid -->
+    <div class="dv-opt" id="1a">
+      <div class="dv-olabel"><a class="dv-oid" href="#1a">1a</a>Dense grid — nearest to today, with a running banner, the check-in nudge and pagination</div>
+      <div class="dv-card">
+        <div style="background:var(--off-white);font:14px/1.5 'DM Sans',system-ui,sans-serif;color:var(--charcoal);font-variant-numeric:tabular-nums">
+
+          <div style="display:flex;align-items:center;gap:12px;padding:14px 20px;background:#fff;border-bottom:1px solid var(--line-200);flex-wrap:wrap">
+            <img src="assets/onesapro-icon.png" alt="OneSapro" style="height:30px;width:auto;flex:none">
+            <div style="flex:1 1 200px;min-width:0">
+              <h1 style="margin:0;font:700 17px/1.25 Montserrat,system-ui;letter-spacing:-.01em;color:var(--charcoal)">My Tasks</h1>
+              <div style="font-size:11.5px;color:var(--ink-400);margin-top:2px">office.venulm@gmail.com · manager view · 09/09/2026</div>
+            </div>
+            <button style="padding:8px 14px;border:1px solid var(--line-200);background:#fff;border-radius:6px;font:500 12.5px 'DM Sans';color:var(--ink-600);cursor:pointer">Bulk add</button>
+            <button style="padding:8px 14px;border:1px solid var(--line-200);background:#fff;border-radius:6px;font:500 12.5px 'DM Sans';color:var(--ink-600);cursor:pointer">Refresh</button>
+            <button style="padding:8px 18px;border:1px solid var(--green-primary);background:var(--green-primary);border-radius:999px;font:600 12.5px 'DM Sans';color:#fff;cursor:pointer">New task</button>
+          </div>
+
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));background:#fff;border-bottom:1px solid var(--line-200)">
+            <sc-for list="{{ stats }}" as="s" hint-placeholder-count="4">
+              <div style="padding:13px 20px;border-right:1px solid var(--line-100);border-bottom:3px solid {{ s.rule }};cursor:pointer">
+                <div style="font:800 24px/1.1 Montserrat,system-ui;letter-spacing:-.02em;color:{{ s.fg }}">{{ s.n }}</div>
+                <div style="font:600 10.5px 'DM Sans';letter-spacing:.1em;text-transform:uppercase;color:var(--ink-400);margin-top:4px">{{ s.label }}</div>
+              </div>
+            </sc-for>
+          </div>
+
+          <div style="display:flex;align-items:flex-end;gap:12px;padding:13px 20px;background:#fff;border-bottom:1px solid var(--line-200);flex-wrap:wrap">
+            <div style="flex:1 1 260px;min-width:0">
+              <label for="a-search" style="display:block;font:600 10.5px 'DM Sans';letter-spacing:.06em;text-transform:uppercase;color:var(--ink-400);margin-bottom:5px">Search</label>
+              <input id="a-search" placeholder="Task, client or ID" style="width:100%;padding:9px 12px;border:1px solid var(--line-200);border-radius:6px;font:13px 'DM Sans';color:var(--charcoal);box-sizing:border-box">
+            </div>
+            <div style="flex:0 1 180px;min-width:0">
+              <label for="a-status" style="display:block;font:600 10.5px 'DM Sans';letter-spacing:.06em;text-transform:uppercase;color:var(--ink-400);margin-bottom:5px">Status</label>
+              <select id="a-status" style="width:100%;padding:9px 12px;border:1px solid var(--line-200);border-radius:6px;font:13px 'DM Sans';background:#fff;color:var(--charcoal);box-sizing:border-box"><option>All statuses</option></select>
+            </div>
+            <div style="flex:0 1 180px;min-width:0">
+              <label for="a-dev" style="display:block;font:600 10.5px 'DM Sans';letter-spacing:.06em;text-transform:uppercase;color:var(--ink-400);margin-bottom:5px">Assignee</label>
+              <select id="a-dev" style="width:100%;padding:9px 12px;border:1px solid var(--line-200);border-radius:6px;font:13px 'DM Sans';background:#fff;color:var(--charcoal);box-sizing:border-box"><option>Everyone</option></select>
+            </div>
+            <label for="a-old" style="display:flex;align-items:center;gap:8px;font:12.5px 'DM Sans';color:var(--ink-600);white-space:nowrap;padding-bottom:10px"><input id="a-old" type="checkbox" style="accent-color:var(--green-medium);margin:0"><span>Include old finished</span></label>
+          </div>
+
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 20px;background:var(--green-primary);color:#fff;flex-wrap:wrap">
+            <span style="font:600 12px 'DM Sans'">3 selected</span>
+            <div style="display:flex;gap:7px;flex-wrap:wrap">
+              <button style="padding:6px 13px;border:1px solid var(--divider-on-green);background:rgba(255,255,255,.12);color:#fff;border-radius:6px;font:500 12px 'DM Sans';cursor:pointer">Start</button>
+              <button style="padding:6px 13px;border:1px solid var(--divider-on-green);background:rgba(255,255,255,.12);color:#fff;border-radius:6px;font:500 12px 'DM Sans';cursor:pointer">Pause</button>
+              <button style="padding:6px 13px;border:1px solid var(--divider-on-green);background:rgba(255,255,255,.12);color:#fff;border-radius:6px;font:500 12px 'DM Sans';cursor:pointer">Reassign</button>
+              <button style="padding:6px 14px;border:1px solid var(--green-lime);background:var(--green-lime);color:var(--green-primary-900);border-radius:6px;font:600 12px 'DM Sans';cursor:pointer">Mark Done</button>
+              <button style="padding:6px 12px;border:1px solid transparent;background:none;color:rgba(255,255,255,.75);border-radius:6px;font:12px 'DM Sans';cursor:pointer">Clear</button>
+            </div>
+          </div>
+
+          <div style="padding:18px 20px 0">
+            <div style="position:relative;background:#fff;border:1px solid var(--line-200);border-radius:14px;padding:16px 18px 16px 22px;overflow:hidden;box-shadow:0 2px 10px rgba(29,93,75,.07)">
+              <div style="position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--green-lime)"></div>
+              <div style="display:flex;align-items:flex-start;gap:24px;flex-wrap:wrap">
+                <div style="flex:1 1 340px;min-width:0">
+                  <div style="display:flex;align-items:center;gap:8px;font:600 10.5px 'DM Sans';color:var(--green-medium);letter-spacing:.12em;text-transform:uppercase">
+                    <span style="width:7px;height:7px;border-radius:50%;background:var(--green-lime);animation:pulse 1.8s ease-in-out infinite;display:inline-block"></span>Now running
+                  </div>
+                  <div style="font:700 17px/1.35 Montserrat,system-ui;letter-spacing:-.01em;margin-top:8px;text-wrap:pretty">Bill split total not matching on a closed table</div>
+                  <div style="font-size:12.5px;color:var(--ink-600);margin-top:5px">TASK-2463 · Riverstone Villas · POS · Venul · due 09/09/2026 5:00 PM</div>
+                </div>
+                <div style="text-align:right;flex:none">
+                  <div style="font:800 30px/1 Montserrat,system-ui;color:var(--green-primary);letter-spacing:-.02em">2h 14m</div>
+                  <div style="font-size:11px;color:var(--ink-400);margin-top:4px">running since 9:30 AM</div>
+                </div>
+                <div style="display:flex;gap:8px;align-self:center;flex:none">
+                  <button style="padding:10px 18px;border:1px solid var(--line-200);background:#fff;color:var(--ink-600);border-radius:999px;font:500 13px 'DM Sans';cursor:pointer">Pause</button>
+                  <button style="padding:10px 20px;border:1px solid var(--green-primary);background:var(--green-primary);color:#fff;border-radius:999px;font:600 13px 'DM Sans';cursor:pointer">Mark Done</button>
+                </div>
+              </div>
+              <sc-if value="{{ showCheckIn }}" hint-placeholder-val="{{ true }}">
+                <div style="display:flex;align-items:center;gap:12px;margin-top:14px;padding:11px 14px;background:var(--state-warn-soft);border:1px solid var(--state-warn-line);border-left:3px solid var(--state-warn);border-radius:8px;flex-wrap:wrap">
+                  <span style="font-size:12.5px;color:#7A4A06;flex:1 1 280px">Nothing logged here for <b>4h 12m</b>. Still working on it?</span>
+                  <button style="padding:6px 12px;border:1px solid var(--state-warn-line);background:#fff;color:#7A4A06;border-radius:6px;font:500 12px 'DM Sans';cursor:pointer">Add a note</button>
+                  <button style="padding:6px 12px;border:1px solid var(--state-warn-line);background:#fff;color:#7A4A06;border-radius:6px;font:500 12px 'DM Sans';cursor:pointer">Yes, keep running</button>
+                </div>
+              </sc-if>
+            </div>
+          </div>
+
+          <div style="padding:16px 20px 4px;display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:12px">
+            <sc-for list="{{ cards }}" as="t" hint-placeholder-count="9">
+              <div style="position:relative;background:#fff;border:1px solid var(--line-200);border-radius:12px;overflow:hidden">
+                <div style="position:absolute;left:0;top:0;bottom:0;width:3px;background:{{ t.spine }}"></div>
+                <div style="display:flex;align-items:flex-start;gap:10px;padding:13px 14px 8px 17px">
+                  <input type="checkbox" aria-label="Select task" style="margin:3px 0 0;accent-color:var(--green-medium);flex:none">
+                  <div style="flex:1;min-width:0">
+                    <div style="font:600 10.5px 'DM Sans';color:var(--ink-400);letter-spacing:.05em">{{ t.idDate }}</div>
+                    <div style="font:600 13.5px/1.45 'DM Sans';margin-top:4px;text-wrap:pretty">{{ t.sum }}</div>
+                    <div style="font-size:12px;color:var(--ink-600);margin-top:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ t.where }}</div>
+                  </div>
+                </div>
+                <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:0 14px 10px 17px">
+                  <span style="display:inline-flex;align-items:center;gap:5px;font:600 11.5px 'DM Sans';color:{{ t.stFg }}"><span style="width:6px;height:6px;border-radius:50%;background:{{ t.stFg }};display:inline-block"></span>{{ t.stLabel }}</span>
+                  <span style="font:600 10.5px 'DM Sans';padding:2px 8px;border-radius:999px;background:{{ t.priBg }};color:{{ t.priFg }}">{{ t.pri }}</span>
+                  <span style="font:11px 'DM Sans';padding:2px 8px;border-radius:999px;background:var(--line-100);color:var(--ink-600)">{{ t.who }}</span>
+                  <span style="font:600 10.5px 'DM Sans';padding:2px 8px;border-radius:999px;background:{{ t.dlBg }};color:{{ t.dlFg }}">{{ t.dl }}</span>
+                  <span style="margin-left:auto;font:11.5px 'DM Sans';color:var(--ink-600);white-space:nowrap">{{ t.time }}</span>
+                </div>
+                <div style="display:flex;gap:7px;padding:0 14px 13px 17px">
+                  <button style="flex:1;padding:7px 4px;border-radius:6px;font:600 12px 'DM Sans';cursor:pointer;background:var(--lime-soft);border:1px solid var(--lime-line);color:var(--green-primary)">Start</button>
+                  <button style="flex:1;padding:7px 4px;border-radius:6px;font:500 12px 'DM Sans';cursor:pointer;background:#fff;border:1px solid var(--line-200);color:var(--ink-600)">Pause</button>
+                  <button style="flex:1;padding:7px 4px;border-radius:6px;font:500 12px 'DM Sans';cursor:pointer;background:#fff;border:1px solid var(--line-200);color:var(--ink-600)">Done</button>
+                  <button style="flex:none;padding:7px 11px;border-radius:6px;font:500 12px 'DM Sans';cursor:pointer;background:#fff;border:1px solid var(--line-200);color:var(--ink-600)">Notes {{ t.comments }}</button>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 20px 18px;flex-wrap:wrap">
+            <div style="font:12.5px 'DM Sans';color:var(--ink-400)">{{ pageLabelA }}</div>
+            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+              <button style="padding:7px 12px;border:1px solid var(--line-200);background:#fff;border-radius:6px;font:500 12px 'DM Sans';color:#BFC5BF;cursor:not-allowed">Previous</button>
+              <button style="padding:7px 12px;border:1px solid var(--green-primary);background:var(--lime-soft);border-radius:6px;font:600 12px 'DM Sans';color:var(--green-primary);cursor:pointer">1</button>
+              <button style="padding:7px 12px;border:1px solid var(--line-200);background:#fff;border-radius:6px;font:500 12px 'DM Sans';color:var(--ink-600);cursor:pointer">2</button>
+              <button style="padding:7px 12px;border:1px solid var(--line-200);background:#fff;border-radius:6px;font:500 12px 'DM Sans';color:var(--ink-600);cursor:pointer">3</button>
+              <span style="font:12px 'DM Sans';color:var(--ink-400);padding:0 3px">…</span>
+              <button style="padding:7px 12px;border:1px solid var(--line-200);background:#fff;border-radius:6px;font:500 12px 'DM Sans';color:var(--ink-600);cursor:pointer">Next</button>
+              <select aria-label="Rows per page" style="margin-left:8px;padding:7px 10px;border:1px solid var(--line-200);border-radius:6px;font:12px 'DM Sans';background:#fff;color:var(--ink-600)"><option>10 / page</option><option>25 / page</option><option>50 / page</option></select>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- ============================================ 1b — table + thread -->
+    <div class="dv-opt" id="1b">
+      <div class="dv-olabel"><a class="dv-oid" href="#1b">1b</a>Table triage — many rows a screen; the open row expands in place into thread, activity and attachments</div>
+      <div class="dv-card">
+        <div style="background:var(--off-white);font:14px/1.5 'DM Sans',system-ui,sans-serif;color:var(--charcoal);font-variant-numeric:tabular-nums">
+
+          <div style="display:flex;align-items:center;gap:12px;padding:14px 20px;background:#fff;border-bottom:1px solid var(--line-200);flex-wrap:wrap">
+            <img src="assets/onesapro-icon.png" alt="OneSapro" style="height:28px;width:auto;flex:none">
+            <h1 style="margin:0;font:700 17px/1.25 Montserrat,system-ui;letter-spacing:-.01em">My Tasks</h1>
+            <div style="display:flex;gap:7px;flex-wrap:wrap">
+              <sc-for list="{{ pills }}" as="p" hint-placeholder-count="4">
+                <span style="font:600 12px 'DM Sans';padding:5px 12px;border-radius:999px;background:{{ p.bg }};color:{{ p.fg }};cursor:pointer">{{ p.text }}</span>
+              </sc-for>
+            </div>
+            <input aria-label="Search tasks" placeholder="Search task, client or ID" style="flex:1 1 200px;min-width:0;padding:9px 12px;border:1px solid var(--line-200);border-radius:6px;font:13px 'DM Sans'">
+            <select aria-label="Filter by assignee" style="padding:9px 12px;border:1px solid var(--line-200);border-radius:6px;font:13px 'DM Sans';background:#fff"><option>Everyone</option></select>
+            <label for="b-old" style="display:flex;align-items:center;gap:8px;font:12.5px 'DM Sans';color:var(--ink-600);white-space:nowrap"><input id="b-old" type="checkbox" style="accent-color:var(--green-medium);margin:0"><span>Old finished</span></label>
+            <button style="padding:8px 18px;border:1px solid var(--green-primary);background:var(--green-primary);border-radius:999px;font:600 12.5px 'DM Sans';color:#fff;cursor:pointer">New task</button>
+          </div>
+
+          <div style="display:flex;align-items:center;gap:14px;padding:10px 20px;background:var(--green-primary);color:#fff;flex-wrap:wrap">
+            <span style="width:7px;height:7px;border-radius:50%;background:var(--green-lime);animation:pulse 1.8s ease-in-out infinite;display:inline-block;flex:none"></span>
+            <span style="font:600 12.5px 'DM Sans'">Running · TASK-2463 Bill split total not matching</span>
+            <span style="font:700 13px Montserrat,system-ui;color:var(--green-lime)">2h 14m</span>
+            <span style="font:12px 'DM Sans';background:rgba(255,255,255,.14);border:1px solid var(--divider-on-green);padding:3px 10px;border-radius:999px">No note in 4h 12m — still on this?</span>
+            <div style="margin-left:auto;display:flex;gap:8px">
+              <button style="padding:6px 13px;border:1px solid var(--divider-on-green);background:rgba(255,255,255,.12);color:#fff;border-radius:6px;font:500 12px 'DM Sans';cursor:pointer">Pause</button>
+              <button style="padding:6px 14px;border:1px solid var(--green-lime);background:var(--green-lime);color:var(--green-primary-900);border-radius:6px;font:600 12px 'DM Sans';cursor:pointer">Mark Done</button>
+            </div>
+          </div>
+
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:9px 20px;background:var(--charcoal);color:#fff;flex-wrap:wrap;gap:10px">
+            <span style="font:600 12px 'DM Sans'">3 selected</span>
+            <div style="display:flex;gap:7px;flex-wrap:wrap">
+              <button style="padding:6px 13px;border:1px solid rgba(255,255,255,.24);background:rgba(255,255,255,.1);color:#fff;border-radius:6px;font:500 12px 'DM Sans';cursor:pointer">Start</button>
+              <button style="padding:6px 13px;border:1px solid rgba(255,255,255,.24);background:rgba(255,255,255,.1);color:#fff;border-radius:6px;font:500 12px 'DM Sans';cursor:pointer">Pause</button>
+              <button style="padding:6px 13px;border:1px solid rgba(255,255,255,.24);background:rgba(255,255,255,.1);color:#fff;border-radius:6px;font:500 12px 'DM Sans';cursor:pointer">Reassign</button>
+              <button style="padding:6px 14px;border:1px solid var(--green-lime);background:var(--green-lime);color:var(--green-primary-900);border-radius:6px;font:600 12px 'DM Sans';cursor:pointer">Mark Done</button>
+              <button style="padding:6px 12px;border:1px solid transparent;background:none;color:rgba(255,255,255,.7);border-radius:6px;font:12px 'DM Sans';cursor:pointer">Clear</button>
+            </div>
+          </div>
+
+          <div style="background:#fff">
+            <div style="display:grid;grid-template-columns:34px 96px minmax(0,2.4fr) minmax(0,1.3fr) 96px 92px 112px 78px minmax(210px,1fr);gap:10px;padding:10px 20px;border-bottom:1px solid var(--line-200);background:var(--green-wash);font:600 10.5px 'DM Sans';color:var(--ink-400);letter-spacing:.08em;text-transform:uppercase">
+              <div><input type="checkbox" aria-label="Select all rows" style="accent-color:var(--green-medium);margin:0"></div>
+              <div>Task</div><div>Summary</div><div>Client · Module</div><div>Assignee</div><div>Priority</div><div>Deadline</div><div>Time</div><div>Actions</div>
+            </div>
+
+            <sc-for list="{{ rowsTop }}" as="t" hint-placeholder-count="4">
+              <div style="display:grid;grid-template-columns:34px 96px minmax(0,2.4fr) minmax(0,1.3fr) 96px 92px 112px 78px minmax(210px,1fr);gap:10px;align-items:center;padding:10px 20px;border-bottom:1px solid var(--line-100)">
+                <div><input type="checkbox" aria-label="Select task" style="accent-color:var(--green-medium);margin:0"></div>
+                <div style="font:500 11.5px 'DM Sans';color:var(--ink-600)">{{ t.id }}</div>
+                <div style="min-width:0">
+                  <div style="font:600 13px 'DM Sans';white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ t.sum }}</div>
+                  <div style="display:inline-flex;align-items:center;gap:5px;font:600 11px 'DM Sans';color:{{ t.stFg }};margin-top:2px"><span style="width:6px;height:6px;border-radius:50%;background:{{ t.stFg }};display:inline-block"></span>{{ t.stLabel }}</div>
+                </div>
+                <div style="font:12px 'DM Sans';color:var(--ink-600);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ t.where }}</div>
+                <div style="font:12px 'DM Sans';color:var(--ink-600)">{{ t.who }}</div>
+                <div><span style="font:600 10.5px 'DM Sans';padding:2px 8px;border-radius:999px;background:{{ t.priBg }};color:{{ t.priFg }}">{{ t.pri }}</span></div>
+                <div><span style="font:600 10.5px 'DM Sans';padding:2px 8px;border-radius:999px;background:{{ t.dlBg }};color:{{ t.dlFg }}">{{ t.dl }}</span></div>
+                <div style="font:11.5px 'DM Sans';color:var(--ink-600)">{{ t.time }}</div>
+                <div style="display:flex;gap:6px;flex-wrap:wrap">
+                  <button style="padding:6px 11px;border-radius:6px;font:600 11.5px 'DM Sans';cursor:pointer;background:var(--lime-soft);border:1px solid var(--lime-line);color:var(--green-primary)">Start</button>
+                  <button style="padding:6px 11px;border-radius:6px;font:500 11.5px 'DM Sans';cursor:pointer;background:#fff;border:1px solid var(--line-200);color:var(--ink-600)">Done</button>
+                  <button style="padding:6px 11px;border-radius:6px;font:500 11.5px 'DM Sans';cursor:pointer;background:#fff;border:1px solid var(--line-200);color:var(--ink-600)">Notes {{ t.comments }}</button>
+                </div>
+              </div>
+            </sc-for>
+
+            <div style="border-bottom:1px solid var(--line-100)">
+              <div style="display:grid;grid-template-columns:34px 96px minmax(0,2.4fr) minmax(0,1.3fr) 96px 92px 112px 78px minmax(210px,1fr);gap:10px;align-items:center;padding:10px 20px;background:var(--lime-soft);border-top:1px solid var(--lime-line)">
+                <div><input type="checkbox" aria-label="Select task" style="accent-color:var(--green-medium);margin:0"></div>
+                <div style="font:600 11.5px 'DM Sans';color:var(--green-primary)">TASK-2477</div>
+                <div style="min-width:0">
+                  <div style="font:600 13px 'DM Sans'">Payment gateway update for card settlement</div>
+                  <div style="display:inline-flex;align-items:center;gap:5px;font:600 11px 'DM Sans';color:var(--state-warn);margin-top:2px"><span style="width:6px;height:6px;border-radius:50%;background:var(--state-warn);display:inline-block"></span>Paused</div>
+                </div>
+                <div style="font:12px 'DM Sans';color:var(--ink-600)">Northgate Resort · FIN</div>
+                <div style="font:12px 'DM Sans';color:var(--ink-600)">Eshani</div>
+                <div><span style="font:600 10.5px 'DM Sans';padding:2px 8px;border-radius:999px;background:var(--state-stop-soft);color:var(--state-stop)">Critical</span></div>
+                <div><span style="font:600 10.5px 'DM Sans';padding:2px 8px;border-radius:999px;background:var(--state-stop-soft);color:var(--state-stop)">1d over</span></div>
+                <div style="font:11.5px 'DM Sans';color:var(--ink-600)">6h 20m</div>
+                <div style="display:flex;gap:6px;flex-wrap:wrap">
+                  <button style="padding:6px 11px;border-radius:6px;font:600 11.5px 'DM Sans';cursor:pointer;background:#fff;border:1px solid var(--lime-line);color:var(--green-primary)">Start</button>
+                  <button style="padding:6px 11px;border-radius:6px;font:500 11.5px 'DM Sans';cursor:pointer;background:#fff;border:1px solid var(--line-200);color:var(--ink-600)">Done</button>
+                  <button style="padding:6px 11px;border-radius:6px;font:500 11.5px 'DM Sans';cursor:pointer;background:var(--charcoal);border:1px solid var(--charcoal);color:#fff">Close row</button>
+                </div>
+              </div>
+
+              <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));background:#fff;border-top:1px solid var(--line-200)">
+                <div style="padding:18px 20px 20px;border-right:1px solid var(--line-100);min-width:0">
+                  <div style="font:600 10.5px 'DM Sans';color:var(--ink-400);letter-spacing:.12em;text-transform:uppercase">Conversation</div>
+                  <div style="display:flex;flex-direction:column;gap:14px;margin-top:14px">
+                    <sc-for list="{{ thread }}" as="c" hint-placeholder-count="3">
+                      <div style="display:flex;gap:11px">
+                        <div style="width:30px;height:30px;border-radius:50%;flex:none;background:{{ c.avBg }};color:{{ c.avFg }};font:600 11.5px/30px 'DM Sans';text-align:center">{{ c.initials }}</div>
+                        <div style="flex:1;min-width:0">
+                          <div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap">
+                            <span style="font:600 12.5px 'DM Sans'">{{ c.name }}</span>
+                            <span style="font:11.5px 'DM Sans';color:var(--ink-400)">{{ c.when }}</span>
+                            <span style="font:600 10px 'DM Sans';padding:1.5px 7px;border-radius:999px;background:{{ c.tagBg }};color:{{ c.tagFg }}">{{ c.tag }}</span>
+                          </div>
+                          <div style="font:13px/1.6 'DM Sans';color:var(--charcoal);margin-top:4px;text-wrap:pretty">{{ c.body }}</div>
+                        </div>
+                      </div>
+                    </sc-for>
+                  </div>
+                  <div style="margin-top:16px;border:1px solid var(--line-200);border-radius:10px;overflow:hidden">
+                    <textarea rows="2" aria-label="Add a comment" placeholder="Write an update — type @ to mention someone" style="width:100%;border:none;padding:11px 13px;font:13px/1.55 'DM Sans';color:var(--charcoal);resize:vertical;box-sizing:border-box;outline:none"></textarea>
+                    <div style="display:flex;align-items:center;gap:8px;padding:9px 12px;background:var(--green-wash);border-top:1px solid var(--line-100);flex-wrap:wrap">
+                      <span style="font:11.5px 'DM Sans';color:var(--ink-400);flex:1 1 auto">@Venul, @Eshani and the reporter get an email</span>
+                      <button style="padding:6px 12px;border:1px solid var(--line-200);background:#fff;color:var(--ink-600);border-radius:6px;font:500 12px 'DM Sans';cursor:pointer">Attach file</button>
+                      <button style="padding:6px 16px;border:1px solid var(--green-primary);background:var(--green-primary);color:#fff;border-radius:999px;font:600 12px 'DM Sans';cursor:pointer">Post update</button>
+                    </div>
+                  </div>
+                  <div style="font:600 10.5px 'DM Sans';color:var(--ink-400);letter-spacing:.12em;text-transform:uppercase;margin-top:18px">Attachments</div>
+                  <div style="display:flex;gap:9px;margin-top:10px;flex-wrap:wrap">
+                    <sc-for list="{{ files }}" as="f" hint-placeholder-count="3">
+                      <div style="display:flex;align-items:center;gap:9px;padding:8px 11px;border:1px solid var(--line-200);border-radius:8px;background:#fff">
+                        <div style="width:26px;height:26px;border-radius:6px;background:var(--green-wash);color:var(--green-medium);font:600 9px/26px 'DM Sans';text-align:center;flex:none">{{ f.kind }}</div>
+                        <div style="min-width:0">
+                          <div style="font:500 12px 'DM Sans';white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:170px">{{ f.name }}</div>
+                          <div style="font:11px 'DM Sans';color:var(--ink-400)">{{ f.meta }}</div>
+                        </div>
+                      </div>
+                    </sc-for>
+                  </div>
+                </div>
+
+                <div style="padding:18px 20px 20px;background:var(--off-white);min-width:0">
+                  <div style="font:600 10.5px 'DM Sans';color:var(--ink-400);letter-spacing:.12em;text-transform:uppercase">Activity</div>
+                  <div style="margin-top:14px">
+                    <sc-for list="{{ activity }}" as="a" hint-placeholder-count="6">
+                      <div style="display:grid;grid-template-columns:16px minmax(0,1fr) auto;gap:11px;align-items:start;padding:0 0 13px">
+                        <span style="width:9px;height:9px;border-radius:50%;background:{{ a.dot }};margin-top:5px;flex:none"></span>
+                        <div style="min-width:0">
+                          <div style="font:500 12.5px/1.5 'DM Sans';color:var(--charcoal);text-wrap:pretty">{{ a.text }}</div>
+                          <div style="font:11.5px 'DM Sans';color:var(--ink-400);margin-top:2px">{{ a.who }}</div>
+                        </div>
+                        <div style="font:11.5px 'DM Sans';color:var(--ink-400);white-space:nowrap">{{ a.when }}</div>
+                      </div>
+                    </sc-for>
+                  </div>
+                  <div style="padding:11px 13px;background:var(--state-warn-soft);border:1px solid var(--state-warn-line);border-left:3px solid var(--state-warn);border-radius:8px;font:12.5px/1.55 'DM Sans';color:#7A4A06">
+                    Time stopped a day ago while the status stayed Paused. The check-in email went to Eshani this morning.
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <sc-for list="{{ rowsBottom }}" as="t" hint-placeholder-count="5">
+              <div style="display:grid;grid-template-columns:34px 96px minmax(0,2.4fr) minmax(0,1.3fr) 96px 92px 112px 78px minmax(210px,1fr);gap:10px;align-items:center;padding:10px 20px;border-bottom:1px solid var(--line-100)">
+                <div><input type="checkbox" aria-label="Select task" style="accent-color:var(--green-medium);margin:0"></div>
+                <div style="font:500 11.5px 'DM Sans';color:var(--ink-600)">{{ t.id }}</div>
+                <div style="min-width:0">
+                  <div style="font:600 13px 'DM Sans';white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ t.sum }}</div>
+                  <div style="display:inline-flex;align-items:center;gap:5px;font:600 11px 'DM Sans';color:{{ t.stFg }};margin-top:2px"><span style="width:6px;height:6px;border-radius:50%;background:{{ t.stFg }};display:inline-block"></span>{{ t.stLabel }}</div>
+                </div>
+                <div style="font:12px 'DM Sans';color:var(--ink-600);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ t.where }}</div>
+                <div style="font:12px 'DM Sans';color:var(--ink-600)">{{ t.who }}</div>
+                <div><span style="font:600 10.5px 'DM Sans';padding:2px 8px;border-radius:999px;background:{{ t.priBg }};color:{{ t.priFg }}">{{ t.pri }}</span></div>
+                <div><span style="font:600 10.5px 'DM Sans';padding:2px 8px;border-radius:999px;background:{{ t.dlBg }};color:{{ t.dlFg }}">{{ t.dl }}</span></div>
+                <div style="font:11.5px 'DM Sans';color:var(--ink-600)">{{ t.time }}</div>
+                <div style="display:flex;gap:6px;flex-wrap:wrap">
+                  <button style="padding:6px 11px;border-radius:6px;font:600 11.5px 'DM Sans';cursor:pointer;background:var(--lime-soft);border:1px solid var(--lime-line);color:var(--green-primary)">Start</button>
+                  <button style="padding:6px 11px;border-radius:6px;font:500 11.5px 'DM Sans';cursor:pointer;background:#fff;border:1px solid var(--line-200);color:var(--ink-600)">Done</button>
+                  <button style="padding:6px 11px;border-radius:6px;font:500 11.5px 'DM Sans';cursor:pointer;background:#fff;border:1px solid var(--line-200);color:var(--ink-600)">Notes {{ t.comments }}</button>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px 20px 18px;flex-wrap:wrap">
+            <div style="font:12.5px 'DM Sans';color:var(--ink-400)">{{ pageLabelB }}</div>
+            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap">
+              <button style="padding:7px 12px;border:1px solid var(--line-200);background:#fff;border-radius:6px;font:500 12px 'DM Sans';color:#BFC5BF;cursor:not-allowed">Previous</button>
+              <button style="padding:7px 12px;border:1px solid var(--green-primary);background:var(--lime-soft);border-radius:6px;font:600 12px 'DM Sans';color:var(--green-primary);cursor:pointer">1</button>
+              <button style="padding:7px 12px;border:1px solid var(--line-200);background:#fff;border-radius:6px;font:500 12px 'DM Sans';color:var(--ink-600);cursor:pointer">2</button>
+              <button style="padding:7px 12px;border:1px solid var(--line-200);background:#fff;border-radius:6px;font:500 12px 'DM Sans';color:var(--ink-600);cursor:pointer">3</button>
+              <span style="font:12px 'DM Sans';color:var(--ink-400);padding:0 3px">…</span>
+              <button style="padding:7px 12px;border:1px solid var(--line-200);background:#fff;border-radius:6px;font:500 12px 'DM Sans';color:var(--ink-600);cursor:pointer">Next</button>
+              <select aria-label="Rows per page" style="margin-left:8px;padding:7px 10px;border:1px solid var(--line-200);border-radius:6px;font:12px 'DM Sans';background:#fff;color:var(--ink-600)"><option>10 / page</option><option>25 / page</option><option>50 / page</option></select>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- =============================================== 1c — status board -->
+    <div class="dv-opt" id="1c">
+      <div class="dv-olabel"><a class="dv-oid" href="#1c">1c</a>Status board — four columns, drag to change status, column counts double as the stat tiles</div>
+      <div class="dv-card">
+        <div style="background:var(--off-white);font:14px/1.5 'DM Sans',system-ui,sans-serif;color:var(--charcoal);font-variant-numeric:tabular-nums">
+
+          <div style="display:flex;align-items:center;gap:12px;padding:14px 20px;background:var(--green-primary);color:#fff;flex-wrap:wrap">
+            <img src="assets/onesapro-icon.png" alt="OneSapro" style="height:28px;width:auto;flex:none">
+            <div style="flex:1 1 200px;min-width:0">
+              <h1 style="margin:0;font:700 17px/1.25 Montserrat,system-ui;letter-spacing:-.01em;color:#fff">My Tasks</h1>
+              <div style="font:11.5px 'DM Sans';color:rgba(255,255,255,.72);margin-top:2px">Venul · 13 active · 09/09/2026</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;padding:6px 14px;background:rgba(255,255,255,.12);border:1px solid var(--divider-on-green);border-radius:999px">
+              <span style="width:7px;height:7px;border-radius:50%;background:var(--green-lime);animation:pulse 1.8s ease-in-out infinite;display:inline-block"></span>
+              <span style="font:600 12px 'DM Sans'">TASK-2463 running</span>
+              <span style="font:700 12.5px Montserrat,system-ui;color:var(--green-lime)">2h 14m</span>
+            </div>
+            <input aria-label="Search tasks" placeholder="Search task, client or ID" style="flex:0 1 240px;min-width:0;padding:9px 12px;border:1px solid var(--divider-on-green);border-radius:6px;font:13px 'DM Sans';background:rgba(255,255,255,.1);color:#fff">
+            <label for="c-old" style="display:flex;align-items:center;gap:8px;font:12.5px 'DM Sans';color:rgba(255,255,255,.85);white-space:nowrap"><input id="c-old" type="checkbox" style="accent-color:var(--green-lime);margin:0"><span>Old finished</span></label>
+            <button style="padding:8px 18px;border:1px solid var(--green-lime);background:var(--green-lime);border-radius:999px;font:600 12.5px 'DM Sans';color:var(--green-primary-900);cursor:pointer">New task</button>
+          </div>
+
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:14px;padding:18px 20px 20px;align-items:start">
+            <sc-for list="{{ columns }}" as="col" hint-placeholder-count="4">
+              <div style="background:#fff;border:1px solid var(--line-200);border-radius:12px;min-width:0;overflow:hidden">
+                <div style="display:flex;align-items:center;gap:9px;padding:12px 14px;border-bottom:1px solid var(--line-100);background:{{ col.headBg }}">
+                  <span style="width:8px;height:8px;border-radius:50%;background:{{ col.dot }};flex:none"></span>
+                  <span style="font:600 12.5px 'DM Sans';color:{{ col.fg }}">{{ col.name }}</span>
+                  <span style="font:800 15px Montserrat,system-ui;color:{{ col.fg }};margin-left:auto">{{ col.count }}</span>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:9px;padding:12px">
+                  <sc-for list="{{ col.tasks }}" as="t" hint-placeholder-count="3">
+                    <div style="border:1px solid var(--line-200);border-left:3px solid {{ t.spine }};border-radius:9px;padding:11px 12px;background:#fff;cursor:grab">
+                      <div style="display:flex;align-items:flex-start;gap:9px">
+                        <input type="checkbox" aria-label="Select task" style="margin:2px 0 0;accent-color:var(--green-medium);flex:none">
+                        <div style="min-width:0;flex:1">
+                          <div style="font:600 10.5px 'DM Sans';color:var(--ink-400);letter-spacing:.05em">{{ t.id }}</div>
+                          <div style="font:600 13px/1.45 'DM Sans';margin-top:4px;text-wrap:pretty">{{ t.sum }}</div>
+                          <div style="font:11.5px 'DM Sans';color:var(--ink-600);margin-top:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ t.where }}</div>
+                        </div>
+                      </div>
+                      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:9px">
+                        <span style="font:600 10.5px 'DM Sans';padding:2px 8px;border-radius:999px;background:{{ t.priBg }};color:{{ t.priFg }}">{{ t.pri }}</span>
+                        <span style="font:600 10.5px 'DM Sans';padding:2px 8px;border-radius:999px;background:{{ t.dlBg }};color:{{ t.dlFg }}">{{ t.dl }}</span>
+                        <span style="font:11px 'DM Sans';color:var(--ink-400);margin-left:auto">Notes {{ t.comments }} · {{ t.time }}</span>
+                      </div>
+                      <div style="display:flex;gap:6px;margin-top:10px">
+                        <button style="flex:1;padding:6px 4px;border-radius:6px;font:600 11.5px 'DM Sans';cursor:pointer;background:var(--lime-soft);border:1px solid var(--lime-line);color:var(--green-primary)">Start</button>
+                        <button style="flex:1;padding:6px 4px;border-radius:6px;font:500 11.5px 'DM Sans';cursor:pointer;background:#fff;border:1px solid var(--line-200);color:var(--ink-600)">Pause</button>
+                        <button style="flex:1;padding:6px 4px;border-radius:6px;font:500 11.5px 'DM Sans';cursor:pointer;background:#fff;border:1px solid var(--line-200);color:var(--ink-600)">Done</button>
+                      </div>
+                    </div>
+                  </sc-for>
+                  <button style="padding:9px;border:1px dashed var(--line-200);background:var(--off-white);border-radius:8px;font:500 12px 'DM Sans';color:var(--ink-400);cursor:pointer">Load 10 more</button>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+
+          <div style="padding:0 20px 18px;font:12.5px 'DM Sans';color:var(--ink-400)">Showing 1–40 of 155 records across four columns · 2,705 finished hidden</div>
+
+        </div>
+      </div>
+    </div>
+
+    <!-- =============================================== 1d — focus + queue -->
+    <div class="dv-opt" id="1d">
+      <div class="dv-olabel"><a class="dv-oid" href="#1d">1d</a>Focus view — one task front and centre with its thread; everything else is a quiet queue beside it</div>
+      <div class="dv-card">
+        <div style="background:var(--off-white);font:14px/1.5 'DM Sans',system-ui,sans-serif;color:var(--charcoal);font-variant-numeric:tabular-nums">
+
+          <div style="display:flex;align-items:center;gap:12px;padding:14px 20px;background:#fff;border-bottom:1px solid var(--line-200);flex-wrap:wrap">
+            <img src="assets/onesapro-icon.png" alt="OneSapro" style="height:28px;width:auto;flex:none">
+            <h1 style="margin:0;font:700 17px/1.25 Montserrat,system-ui;letter-spacing:-.01em;flex:1 1 140px">My Tasks</h1>
+            <sc-for list="{{ stats }}" as="s" hint-placeholder-count="4">
+              <div style="display:flex;align-items:baseline;gap:7px;padding:5px 13px;border:1px solid var(--line-200);border-radius:999px;cursor:pointer">
+                <span style="font:800 14px Montserrat,system-ui;color:{{ s.fg }}">{{ s.n }}</span>
+                <span style="font:600 10.5px 'DM Sans';letter-spacing:.08em;text-transform:uppercase;color:var(--ink-400)">{{ s.label }}</span>
+              </div>
+            </sc-for>
+            <label for="d-old" style="display:flex;align-items:center;gap:8px;font:12.5px 'DM Sans';color:var(--ink-600);white-space:nowrap"><input id="d-old" type="checkbox" style="accent-color:var(--green-medium);margin:0"><span>Old finished</span></label>
+            <button style="padding:8px 18px;border:1px solid var(--green-primary);background:var(--green-primary);border-radius:999px;font:600 12.5px 'DM Sans';color:#fff;cursor:pointer">New task</button>
+          </div>
+
+          <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(420px,1fr));gap:16px;padding:18px 20px 20px;align-items:start">
+
+            <div style="background:#fff;border:1px solid var(--line-200);border-radius:14px;overflow:hidden;box-shadow:0 2px 12px rgba(29,93,75,.08);min-width:0">
+              <div style="padding:18px 20px 16px;background:var(--green-primary);color:#fff">
+                <div style="display:flex;align-items:center;gap:8px;font:600 10.5px 'DM Sans';letter-spacing:.12em;text-transform:uppercase;color:var(--green-lime)">
+                  <span style="width:7px;height:7px;border-radius:50%;background:var(--green-lime);animation:pulse 1.8s ease-in-out infinite;display:inline-block"></span>Now running
+                </div>
+                <div style="font:700 21px/1.3 Montserrat,system-ui;letter-spacing:-.015em;margin-top:10px;text-wrap:pretty">Bill split total not matching on a closed table</div>
+                <div style="font:12.5px 'DM Sans';color:rgba(255,255,255,.78);margin-top:7px">TASK-2463 · Riverstone Villas · POS · reported by Nadeesha · due 09/09/2026 5:00 PM</div>
+                <div style="display:flex;align-items:flex-end;gap:16px;margin-top:16px;flex-wrap:wrap">
+                  <div style="flex:1 1 auto">
+                    <div style="font:800 34px/1 Montserrat,system-ui;color:var(--green-lime);letter-spacing:-.02em">2h 14m</div>
+                    <div style="font:11.5px 'DM Sans';color:rgba(255,255,255,.7);margin-top:4px">today · 6h 05m logged in total</div>
+                  </div>
+                  <div style="display:flex;gap:8px;flex-wrap:wrap">
+                    <button style="padding:10px 18px;border:1px solid var(--divider-on-green);background:rgba(255,255,255,.12);color:#fff;border-radius:999px;font:500 13px 'DM Sans';cursor:pointer">Pause</button>
+                    <button style="padding:10px 20px;border:1px solid var(--green-lime);background:var(--green-lime);color:var(--green-primary-900);border-radius:999px;font:600 13px 'DM Sans';cursor:pointer">Mark Done</button>
+                  </div>
+                </div>
+              </div>
+
+              <sc-if value="{{ showCheckIn }}" hint-placeholder-val="{{ true }}">
+                <div style="display:flex;align-items:center;gap:12px;padding:11px 20px;background:var(--state-warn-soft);border-bottom:1px solid var(--state-warn-line);flex-wrap:wrap">
+                  <span style="font:12.5px 'DM Sans';color:#7A4A06;flex:1 1 260px">Nothing logged here for <b>4h 12m</b>. A note keeps this off the COO's follow-up list.</span>
+                  <button style="padding:6px 12px;border:1px solid var(--state-warn-line);background:#fff;color:#7A4A06;border-radius:6px;font:500 12px 'DM Sans';cursor:pointer">Add a note</button>
+                  <button style="padding:6px 12px;border:1px solid var(--state-warn-line);background:#fff;color:#7A4A06;border-radius:6px;font:500 12px 'DM Sans';cursor:pointer">Yes, keep running</button>
+                </div>
+              </sc-if>
+
+              <div style="padding:18px 20px 20px">
+                <div style="font:600 10.5px 'DM Sans';color:var(--ink-400);letter-spacing:.12em;text-transform:uppercase">Conversation</div>
+                <div style="display:flex;flex-direction:column;gap:14px;margin-top:14px">
+                  <sc-for list="{{ thread }}" as="c" hint-placeholder-count="3">
+                    <div style="display:flex;gap:11px">
+                      <div style="width:30px;height:30px;border-radius:50%;flex:none;background:{{ c.avBg }};color:{{ c.avFg }};font:600 11.5px/30px 'DM Sans';text-align:center">{{ c.initials }}</div>
+                      <div style="flex:1;min-width:0">
+                        <div style="display:flex;align-items:baseline;gap:8px;flex-wrap:wrap">
+                          <span style="font:600 12.5px 'DM Sans'">{{ c.name }}</span>
+                          <span style="font:11.5px 'DM Sans';color:var(--ink-400)">{{ c.when }}</span>
+                          <span style="font:600 10px 'DM Sans';padding:1.5px 7px;border-radius:999px;background:{{ c.tagBg }};color:{{ c.tagFg }}">{{ c.tag }}</span>
+                        </div>
+                        <div style="font:13px/1.6 'DM Sans';color:var(--charcoal);margin-top:4px;text-wrap:pretty">{{ c.body }}</div>
+                      </div>
+                    </div>
+                  </sc-for>
+                </div>
+                <div style="margin-top:16px;border:1px solid var(--line-200);border-radius:10px;overflow:hidden">
+                  <textarea rows="2" aria-label="Add a comment" placeholder="Write an update — type @ to mention someone" style="width:100%;border:none;padding:11px 13px;font:13px/1.55 'DM Sans';color:var(--charcoal);resize:vertical;box-sizing:border-box;outline:none"></textarea>
+                  <div style="display:flex;align-items:center;gap:8px;padding:9px 12px;background:var(--green-wash);border-top:1px solid var(--line-100);flex-wrap:wrap">
+                    <span style="font:11.5px 'DM Sans';color:var(--ink-400);flex:1 1 auto">Posting also logs 15 minutes against this task</span>
+                    <button style="padding:6px 12px;border:1px solid var(--line-200);background:#fff;color:var(--ink-600);border-radius:6px;font:500 12px 'DM Sans';cursor:pointer">Attach file</button>
+                    <button style="padding:6px 16px;border:1px solid var(--green-primary);background:var(--green-primary);color:#fff;border-radius:999px;font:600 12px 'DM Sans';cursor:pointer">Post update</button>
+                  </div>
+                </div>
+                <div style="display:flex;gap:9px;margin-top:16px;flex-wrap:wrap">
+                  <sc-for list="{{ files }}" as="f" hint-placeholder-count="3">
+                    <div style="display:flex;align-items:center;gap:9px;padding:8px 11px;border:1px solid var(--line-200);border-radius:8px;background:#fff">
+                      <div style="width:26px;height:26px;border-radius:6px;background:var(--green-wash);color:var(--green-medium);font:600 9px/26px 'DM Sans';text-align:center;flex:none">{{ f.kind }}</div>
+                      <div style="min-width:0">
+                        <div style="font:500 12px 'DM Sans';white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:160px">{{ f.name }}</div>
+                        <div style="font:11px 'DM Sans';color:var(--ink-400)">{{ f.meta }}</div>
+                      </div>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+            </div>
+
+            <div style="background:#fff;border:1px solid var(--line-200);border-radius:14px;overflow:hidden;min-width:0">
+              <div style="display:flex;align-items:center;gap:10px;padding:13px 16px;border-bottom:1px solid var(--line-100);flex-wrap:wrap">
+                <span style="font:700 13.5px Montserrat,system-ui">Up next</span>
+                <span style="font:11.5px 'DM Sans';color:var(--ink-400)">overdue first, then deadline</span>
+                <select aria-label="Sort queue" style="margin-left:auto;padding:7px 10px;border:1px solid var(--line-200);border-radius:6px;font:12px 'DM Sans';background:#fff;color:var(--ink-600)"><option>Deadline</option><option>Priority</option><option>Client</option></select>
+              </div>
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 16px;background:var(--charcoal);color:#fff;flex-wrap:wrap">
+                <span style="font:600 12px 'DM Sans'">2 selected</span>
+                <div style="display:flex;gap:7px;flex-wrap:wrap">
+                  <button style="padding:5px 12px;border:1px solid rgba(255,255,255,.24);background:rgba(255,255,255,.1);color:#fff;border-radius:6px;font:500 11.5px 'DM Sans';cursor:pointer">Start</button>
+                  <button style="padding:5px 12px;border:1px solid rgba(255,255,255,.24);background:rgba(255,255,255,.1);color:#fff;border-radius:6px;font:500 11.5px 'DM Sans';cursor:pointer">Reassign</button>
+                  <button style="padding:5px 13px;border:1px solid var(--green-lime);background:var(--green-lime);color:var(--green-primary-900);border-radius:6px;font:600 11.5px 'DM Sans';cursor:pointer">Mark Done</button>
+                </div>
+              </div>
+              <sc-for list="{{ queue }}" as="t" hint-placeholder-count="8">
+                <div style="display:flex;align-items:center;gap:11px;padding:11px 16px;border-bottom:1px solid var(--line-100)">
+                  <input type="checkbox" aria-label="Select task" style="accent-color:var(--green-medium);margin:0;flex:none">
+                  <span style="width:3px;height:30px;border-radius:2px;background:{{ t.spine }};flex:none"></span>
+                  <div style="flex:1;min-width:0">
+                    <div style="font:600 13px 'DM Sans';white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ t.sum }}</div>
+                    <div style="font:11.5px 'DM Sans';color:var(--ink-400);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ t.meta }}</div>
+                  </div>
+                  <span style="font:600 10.5px 'DM Sans';padding:2px 8px;border-radius:999px;background:{{ t.dlBg }};color:{{ t.dlFg }};flex:none">{{ t.dl }}</span>
+                  <button style="padding:6px 12px;border-radius:6px;font:600 11.5px 'DM Sans';cursor:pointer;background:var(--lime-soft);border:1px solid var(--lime-line);color:var(--green-primary);flex:none">Start</button>
+                </div>
+              </sc-for>
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 16px;flex-wrap:wrap">
+                <span style="font:12.5px 'DM Sans';color:var(--ink-400)">{{ pageLabelD }}</span>
+                <div style="display:flex;gap:6px">
+                  <button style="padding:7px 12px;border:1px solid var(--line-200);background:#fff;border-radius:6px;font:500 12px 'DM Sans';color:#BFC5BF;cursor:not-allowed">Previous</button>
+                  <button style="padding:7px 12px;border:1px solid var(--line-200);background:#fff;border-radius:6px;font:500 12px 'DM Sans';color:var(--ink-600);cursor:pointer">Next</button>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============================================== 1e — shared states -->
+    <div class="dv-opt" id="1e">
+      <div class="dv-olabel"><a class="dv-oid" href="#1e">1e</a>Shared states — isDirty discard confirm, delete confirm, toasts, loading, empty, and the check-in email</div>
+      <div class="dv-card">
+        <div style="background:var(--off-white);font:14px/1.5 'DM Sans',system-ui,sans-serif;color:var(--charcoal);padding:20px;display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:16px;align-items:start">
+
+          <div style="background:#fff;border:1px solid var(--line-200);border-radius:12px;padding:16px;min-width:0">
+            <div style="font:600 10.5px 'DM Sans';color:var(--ink-400);letter-spacing:.12em;text-transform:uppercase">isDirty — discard confirm</div>
+            <div style="margin-top:12px;border:1px solid var(--line-200);border-radius:12px;overflow:hidden">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:13px 15px;border-bottom:1px solid var(--line-100)">
+                <span style="font:700 14px Montserrat,system-ui">Discard changes?</span>
+                <button style="padding:4px 10px;border:1px solid var(--line-200);background:#fff;border-radius:6px;font:12px 'DM Sans';color:var(--ink-600);cursor:pointer">Close</button>
+              </div>
+              <div style="padding:14px 15px;font:13px/1.65 'DM Sans';color:var(--ink-600)">You have unsaved changes on <b style="color:var(--charcoal)">TASK-2477</b>. Closing now loses the summary, the remarks and two attachments.</div>
+              <div style="display:flex;justify-content:flex-end;gap:9px;padding:13px 15px;background:var(--green-wash);border-top:1px solid var(--line-100)">
+                <button style="padding:9px 16px;border:1px solid var(--line-200);background:#fff;color:var(--ink-600);border-radius:999px;font:500 12.5px 'DM Sans';cursor:pointer">Keep Editing</button>
+                <button style="padding:9px 16px;border:1px solid var(--state-stop);background:var(--state-stop);color:#fff;border-radius:999px;font:600 12.5px 'DM Sans';cursor:pointer">Discard Changes</button>
+              </div>
+            </div>
+            <div style="font:11.5px/1.65 'DM Sans';color:var(--ink-400);margin-top:10px">The Close button routes through the same handler — <code>onClose={handleCancel}</code>, never <code>window.confirm()</code>.</div>
+          </div>
+
+          <div style="background:#fff;border:1px solid var(--line-200);border-radius:12px;padding:16px;min-width:0">
+            <div style="font:600 10.5px 'DM Sans';color:var(--ink-400);letter-spacing:.12em;text-transform:uppercase">Confirm delete</div>
+            <div style="margin-top:12px;border:1px solid var(--line-200);border-radius:12px;overflow:hidden">
+              <div style="padding:13px 15px;border-bottom:1px solid var(--line-100);font:700 14px Montserrat,system-ui">Confirm Delete</div>
+              <div style="padding:14px 15px;font:13px/1.65 'DM Sans';color:var(--ink-600)">Are you sure you want to delete <b style="color:var(--charcoal)">TASK-2481 Rooming list report</b>? This cannot be undone.</div>
+              <div style="display:flex;justify-content:flex-end;gap:9px;padding:13px 15px;background:var(--green-wash);border-top:1px solid var(--line-100)">
+                <button style="padding:9px 16px;border:1px solid var(--line-200);background:#fff;color:var(--ink-600);border-radius:999px;font:500 12.5px 'DM Sans';cursor:pointer">Cancel</button>
+                <button style="padding:9px 16px;border:1px solid var(--state-stop);background:var(--state-stop);color:#fff;border-radius:999px;font:600 12.5px 'DM Sans';cursor:pointer">Delete</button>
+              </div>
+            </div>
+            <div style="font:600 10.5px 'DM Sans';color:var(--ink-400);letter-spacing:.12em;text-transform:uppercase;margin-top:18px">Toasts</div>
+            <div style="display:flex;flex-direction:column;gap:9px;margin-top:11px">
+              <sc-for list="{{ toasts }}" as="t" hint-placeholder-count="3">
+                <div style="display:flex;align-items:center;gap:9px;padding:11px 13px;border-radius:9px;background:{{ t.bg }};color:{{ t.fg }};font:500 12.5px 'DM Sans'"><span style="width:7px;height:7px;border-radius:50%;background:{{ t.dot }};flex:none"></span>{{ t.text }}</div>
+              </sc-for>
+            </div>
+          </div>
+
+          <div style="background:#fff;border:1px solid var(--line-200);border-radius:12px;padding:16px;min-width:0">
+            <div style="font:600 10.5px 'DM Sans';color:var(--ink-400);letter-spacing:.12em;text-transform:uppercase">Loading skeleton</div>
+            <div style="display:flex;flex-direction:column;gap:9px;margin-top:12px">
+              <sc-for list="{{ skeleton }}" as="k" hint-placeholder-count="3">
+                <div style="border:1px solid var(--line-100);border-radius:10px;padding:12px">
+                  <div style="height:9px;width:{{ k.a }};border-radius:5px;background:var(--line-100)"></div>
+                  <div style="height:13px;width:{{ k.b }};border-radius:5px;background:var(--line-200);margin-top:9px"></div>
+                  <div style="display:flex;gap:7px;margin-top:11px">
+                    <div style="height:26px;flex:1;border-radius:6px;background:var(--line-100)"></div>
+                    <div style="height:26px;flex:1;border-radius:6px;background:var(--line-100)"></div>
+                    <div style="height:26px;flex:1;border-radius:6px;background:var(--line-100)"></div>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+            <div style="font:600 10.5px 'DM Sans';color:var(--ink-400);letter-spacing:.12em;text-transform:uppercase;margin-top:18px">Empty state</div>
+            <div style="margin-top:11px;border:1px dashed var(--line-200);border-radius:10px;padding:26px 16px;text-align:center;background:var(--off-white)">
+              <div style="font:600 13.5px 'DM Sans';color:var(--charcoal)">No records found.</div>
+              <div style="font:12px/1.6 'DM Sans';color:var(--ink-400);margin-top:5px">Nothing matches “gateway” with Status = Blocked.</div>
+              <button style="margin-top:13px;padding:8px 16px;border:1px solid var(--line-200);background:#fff;color:var(--ink-600);border-radius:999px;font:500 12.5px 'DM Sans';cursor:pointer">Clear filters</button>
+            </div>
+          </div>
+
+          <div style="background:#fff;border:1px solid var(--line-200);border-radius:12px;padding:16px;min-width:0">
+            <div style="font:600 10.5px 'DM Sans';color:var(--ink-400);letter-spacing:.12em;text-transform:uppercase">Check-in email — fires after 4h with nothing logged</div>
+            <div style="margin-top:12px;border:1px solid var(--line-200);border-radius:12px;overflow:hidden">
+              <div style="padding:12px 15px;border-bottom:1px solid var(--line-100);background:var(--green-wash)">
+                <div style="font:600 12.5px 'DM Sans';color:var(--charcoal)">Still on TASK-2477? Nothing logged since 9:40 AM</div>
+                <div style="font:11.5px 'DM Sans';color:var(--ink-400);margin-top:3px">Task Tracker · to eshani@onesapro.com · 09/09/2026 1:40 PM</div>
+              </div>
+              <div style="padding:15px;font:13px/1.7 'DM Sans';color:var(--ink-600)">
+                <div><b style="color:var(--charcoal)">Payment gateway update for card settlement</b></div>
+                <div style="margin-top:4px">Northgate Resort · FIN · Critical · deadline was 08/09/2026 5:00 PM</div>
+                <div style="margin-top:12px">The timer has been paused for 4 hours and the deadline has passed. Reply with a note, or use a button below — either one updates the sheet and the thread.</div>
+                <div style="display:flex;gap:9px;margin-top:16px;flex-wrap:wrap">
+                  <span style="padding:9px 16px;border:1px solid var(--green-primary);background:var(--green-primary);color:#fff;border-radius:999px;font:600 12.5px 'DM Sans'">Resume work</span>
+                  <span style="padding:9px 16px;border:1px solid var(--line-200);background:#fff;color:var(--ink-600);border-radius:999px;font:500 12.5px 'DM Sans'">Add a note</span>
+                  <span style="padding:9px 16px;border:1px solid var(--line-200);background:#fff;color:var(--ink-600);border-radius:999px;font:500 12.5px 'DM Sans'">Blocked — tell the manager</span>
+                </div>
+              </div>
+              <div style="padding:11px 15px;background:var(--off-white);border-top:1px solid var(--line-100);font:11px/1.6 'DM Sans';color:var(--ink-400)">You get this because you are the assignee. Change your check-in frequency in Preferences.</div>
+            </div>
+            <div style="font:11.5px/1.65 'DM Sans';color:var(--ink-400);margin-top:12px"><b style="color:var(--charcoal)">Palette note:</b> amber and red here are additions — the OneSapro palette is greens only and carries no warning or danger hue. Everything else is a brand token.</div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+
+  </div>
+  <p class="dv-next">Try next: “prototype <a href="#1b">1b</a> with the thread working” · “merge <a href="#1d">1d</a>'s focus card into <a href="#1a">1a</a>” · “now do the submission form and the auto-fill panel”</p>
+</section>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{
+  &quot;showCheckIn&quot;: { &quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: true, &quot;tsType&quot;: &quot;boolean&quot;, &quot;section&quot;: &quot;Behaviour&quot; },
+  &quot;density&quot;: { &quot;editor&quot;: &quot;enum&quot;, &quot;options&quot;: [&quot;roomy&quot;, &quot;balanced&quot;, &quot;tight&quot;], &quot;default&quot;: &quot;balanced&quot;, &quot;tsType&quot;: &quot;string&quot;, &quot;section&quot;: &quot;Behaviour&quot; }
+}">
+/**
+ * Data + derived view values for the Task Tracker mockup board.
+ * Everything the template renders comes from here so the markup stays
+ * declarative — no expressions in holes, per DC template rules.
+ */
+const C = {
+  primary: '#00712D', primary900: '#00481D', lime: '#7EC60F', limeSoft: '#EAF6D8',
+  medium: '#5FA201', forest: '#1D5D4B', wash: '#F0F6F1',
+  charcoal: '#323232', ink600: '#4A4A4A', ink400: '#8A8E8B',
+  line200: '#E2E7E2', line100: '#EEF1EE',
+  warn: '#B26B00', warnSoft: '#FBF1E0', stop: '#B3261E', stopSoft: '#FBECEA'
+};
+
+/* Status → dot/label. "In Progress" reads as "Active" on cards, as it does today. */
+const STATUS = {
+  New:          { label: 'New',     fg: C.ink400, spine: '#C6CCC6' },
+  'In Progress':{ label: 'Active',  fg: C.primary, spine: C.lime },
+  Paused:       { label: 'Paused',  fg: C.warn,   spine: C.warn },
+  Blocked:      { label: 'Blocked', fg: C.forest, spine: C.forest },
+  Done:         { label: 'Done',    fg: C.medium, spine: C.medium }
+};
+
+/* Priority tints. Only Critical carries weight; Low recedes. */
+const PRIORITY = {
+  Critical: { bg: C.stopSoft, fg: C.stop },
+  High:     { bg: C.warnSoft, fg: C.warn },
+  Medium:   { bg: C.line100,  fg: C.ink600 },
+  Low:      { bg: C.line100,  fg: C.ink400 }
+};
+
+/** Deadline chip. Negative hours = overdue; under 4h = urgent. */
+function deadlineChip(hours) {
+  if (hours === null || hours === undefined) return { dl: 'No deadline', dlBg: 'transparent', dlFg: C.ink400 };
+  if (hours < 0) return { dl: humanSpan(-hours) + ' over', dlBg: C.stopSoft, dlFg: C.stop };
+  if (hours < 4) return { dl: humanSpan(hours) + ' left', dlBg: C.warnSoft, dlFg: C.warn };
+  return { dl: humanSpan(hours) + ' left', dlBg: 'transparent', dlFg: C.ink400 };
+}
+
+/** Under an hour reports minutes — "0h over" on a 40-minute miss reads as a bug. */
+function humanSpan(h) {
+  if (h < 1) return Math.max(1, Math.round(h * 60)) + 'm';
+  if (h < 24) return Math.floor(h) + 'h';
+  const d = Math.floor(h / 24), rem = Math.floor(h % 24);
+  return rem ? d + 'd ' + rem + 'h' : d + 'd';
+}
+
+/** One task record → the flat values a card, row or queue line needs. */
+function decorate(t) {
+  const st = STATUS[t.status] || STATUS.New;
+  const pri = PRIORITY[t.priority] || PRIORITY.Medium;
+  const dl = deadlineChip(t.deadlineHours);
+  return {
+    id: t.id,
+    idDate: t.id + ' · ' + t.date,
+    sum: t.sum,
+    where: t.client + ' · ' + t.module,
+    meta: t.id + ' · ' + t.client + ' · ' + t.who,
+    who: t.who,
+    time: t.time || '—',
+    comments: t.comments,
+    stLabel: st.label, stFg: st.fg, spine: dl.dlFg === C.stop ? C.stop : st.spine,
+    pri: t.priority, priBg: pri.bg, priFg: pri.fg,
+    dl: dl.dl, dlBg: dl.dlBg, dlFg: dl.dlFg
+  };
+}
+
+/* Placeholder data — realistic shape, invented clients and summaries. */
+const TASKS = [
+  { id:'TASK-2477', date:'08/09/2026', sum:'Payment gateway update for card settlement', client:'Northgate Resort', module:'FIN', who:'Eshani', status:'Paused', priority:'Critical', deadlineHours:-27, time:'6h 20m', comments:4 },
+  { id:'TASK-2481', date:'08/09/2026', sum:'Rooming list report shows cancelled rooms', client:'Lakehouse Retreat', module:'FO', who:'Janith', status:'New', priority:'High', deadlineHours:3, time:null, comments:1 },
+  { id:'TASK-2469', date:'07/09/2026', sum:'Channel manager rate push failing overnight', client:'Cloudview Hotels', module:'CM', who:'Isura', status:'Blocked', priority:'Critical', deadlineHours:-9, time:'1h 45m', comments:6 },
+  { id:'TASK-2484', date:'09/09/2026', sum:'Service charge printing twice on split bills', client:'Harbour Grill', module:'POS', who:'Venul', status:'New', priority:'High', deadlineHours:7, time:null, comments:0 },
+  { id:'TASK-2458', date:'05/09/2026', sum:'Guide commission not carried to the invoice', client:'Palm Ridge Villas', module:'FIN', who:'Eshani', status:'Paused', priority:'Medium', deadlineHours:-52, time:'3h 05m', comments:3 },
+  { id:'TASK-2486', date:'09/09/2026', sum:'Add stock take variance column to the report', client:'Silverstone Inn', module:'INV', who:'Janith', status:'New', priority:'Medium', deadlineHours:29, time:null, comments:1 },
+  { id:'TASK-2472', date:'07/09/2026', sum:'QR order lands in the wrong outlet after 6 PM', client:'Baytree Cafe', module:'QR', who:'Isura', status:'In Progress', priority:'High', deadlineHours:2, time:'0h 50m', comments:2 },
+  { id:'TASK-2455', date:'04/09/2026', sum:'Night audit posting duplicate city ledger lines', client:'Riverstone Villas', module:'FO', who:'Venul', status:'Paused', priority:'Critical', deadlineHours:-76, time:'8h 10m', comments:7 },
+  { id:'TASK-2489', date:'09/09/2026', sum:'New user cannot see the housekeeping board', client:'Meridian Beach', module:'HK', who:'Unassigned', status:'New', priority:'Low', deadlineHours:52, time:null, comments:0 },
+  { id:'TASK-2461', date:'06/09/2026', sum:'Sync engine retry loop after a failed rate pull', client:'Cloudview Hotels', module:'Sync', who:'Isura', status:'Blocked', priority:'High', deadlineHours:-18, time:'2h 30m', comments:5 },
+  { id:'TASK-2491', date:'09/09/2026', sum:'Discount reason list needs three new options', client:'Harbour Grill', module:'POS', who:'Janith', status:'New', priority:'Low', deadlineHours:76, time:null, comments:0 },
+  { id:'TASK-2465', date:'06/09/2026', sum:'Booking confirmation email missing the total', client:'Palm Ridge Villas', module:'IBE', who:'Eshani', status:'In Progress', priority:'High', deadlineHours:5, time:'1h 15m', comments:2 },
+  { id:'TASK-2450', date:'03/09/2026', sum:'Tax breakdown rounding off by one rupee', client:'Silverstone Inn', module:'FIN', who:'Venul', status:'Paused', priority:'Medium', deadlineHours:-101, time:'4h 40m', comments:3 },
+  { id:'TASK-2493', date:'09/09/2026', sum:'Housekeeping status not clearing on checkout', client:'Meridian Beach', module:'HK', who:'Unassigned', status:'New', priority:'Medium', deadlineHours:33, time:null, comments:1 }
+];
+
+class Component extends DCLogic {
+  renderVals() {
+    const showCheckIn = this.props.showCheckIn ?? true;
+    const density = this.props.density ?? 'balanced';
+    const perPage = density === 'tight' ? 12 : density === 'roomy' ? 6 : 9;
+
+    const all = TASKS.map(decorate);
+
+    const stats = [
+      { n: '155', label: 'Open',    fg: C.charcoal, rule: C.primary },
+      { n: '13',  label: 'Active',  fg: C.primary,  rule: 'transparent' },
+      { n: '40',  label: 'Paused',  fg: C.warn,     rule: 'transparent' },
+      { n: '116', label: 'Overdue', fg: C.stop,     rule: 'transparent' }
+    ];
+
+    const pills = [
+      { text: '155 open',    bg: C.limeSoft, fg: C.primary },
+      { text: '13 active',   bg: C.wash,     fg: C.medium },
+      { text: '40 paused',   bg: C.warnSoft, fg: C.warn },
+      { text: '116 overdue', bg: C.stopSoft, fg: C.stop }
+    ];
+
+    const thread = [
+      { initials:'ND', name:'Nadeesha (client)', when:'08/09 4:12 PM', tag:'Reporter', tagBg:C.line100, tagFg:C.ink600,
+        avBg:C.line100, avFg:C.ink600,
+        body:'Card settlements have not matched the bank file since Friday. Finance is holding three days of reconciliation.' },
+      { initials:'VE', name:'Venul', when:'09/09 9:05 AM', tag:'Manager', tagBg:C.limeSoft, tagFg:C.primary,
+        avBg:C.primary, avFg:'#fff',
+        body:'@Eshani this is the one the COO asked about. Keep the summary in plain English on the sheet — no internal codes.' },
+      { initials:'ES', name:'Eshani', when:'09/09 9:40 AM', tag:'Assignee', tagBg:C.wash, tagFg:C.medium,
+        avBg:C.medium, avFg:'#fff',
+        body:'Gateway sandbox is rejecting the new settlement callback. Waiting on credentials from the bank, so I have paused the timer rather than let it run.' }
+    ];
+
+    const files = [
+      { kind:'PNG', name:'settlement-mismatch.png', meta:'420 KB · Nadeesha' },
+      { kind:'PDF', name:'bank-file-08-09.pdf',     meta:'1.2 MB · Nadeesha' },
+      { kind:'LOG', name:'gateway-callback.log',    meta:'88 KB · Eshani' }
+    ];
+
+    const activity = [
+      { text:'Status changed to Paused',                 who:'Eshani',  when:'09/09 9:40 AM', dot:C.warn },
+      { text:'Comment added, @Eshani mentioned',         who:'Venul',   when:'09/09 9:05 AM', dot:C.primary },
+      { text:'Check-in email sent — nothing logged 4h',  who:'System',  when:'09/09 1:40 PM', dot:C.warn },
+      { text:'Deadline passed',                          who:'System',  when:'08/09 5:00 PM', dot:C.stop },
+      { text:'Timer ran 6h 20m across two sessions',     who:'Eshani',  when:'08/09 10:20 AM', dot:C.medium },
+      { text:'Task created from the submission form',    who:'Nadeesha',when:'08/09 4:12 PM', dot:C.ink400 }
+    ];
+
+    const columns = [
+      { name:'New',     count:'62', dot:'#C6CCC6', fg:C.charcoal, headBg:'#fff',
+        tasks:[all[1], all[3], all[8]] },
+      { name:'Active',  count:'13', dot:C.lime,    fg:C.primary,  headBg:C.limeSoft,
+        tasks:[all[6], all[11]] },
+      { name:'Paused',  count:'40', dot:C.warn,    fg:C.warn,     headBg:C.warnSoft,
+        tasks:[all[0], all[4], all[12]] },
+      { name:'Blocked', count:'9',  dot:C.forest,  fg:C.forest,   headBg:C.wash,
+        tasks:[all[2], all[9]] }
+    ];
+
+    const toasts = [
+      { text:'Task updated successfully',                     bg:C.primary,  fg:'#fff', dot:C.lime },
+      { text:'Could not reach the sheet. Nothing was saved.', bg:C.stop,     fg:'#fff', dot:'#fff' },
+      { text:'Please fill all required fields',               bg:C.warnSoft, fg:'#7A4A06', dot:C.warn }
+    ];
+
+    return {
+      showCheckIn,
+      stats, pills, thread, files, activity, columns, toasts,
+      cards: all.slice(0, perPage),
+      rowsTop: all.slice(1, 5),
+      rowsBottom: all.slice(5, 12),
+      queue: all.slice(1, 9),
+      skeleton: [ { a:'34%', b:'78%' }, { a:'28%', b:'62%' }, { a:'40%', b:'85%' } ],
+      pageLabelA: 'Showing 1–' + perPage + ' of 155 records · 2,705 finished hidden',
+      pageLabelB: 'Showing 1–12 of 155 records',
+      pageLabelD: 'Showing 1–8 of 155 records'
+    };
+  }
+}
+
+</script>
+</body>
+</html>

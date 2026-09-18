@@ -232,11 +232,7 @@
      shows the work and the card itself carries any failure. */
   .card.busy { pointer-events:none; }
   .card.busy .card-top, .card.busy .card-meta { opacity:.5; transition:opacity .12s; }
-  .act.working { position:relative; color:transparent !important; pointer-events:none; }
-  .act.working::after { content:""; position:absolute; inset:0; margin:auto;
-    width:12px; height:12px; border:2px solid var(--line-200);
-    border-top-color:var(--green-medium); border-radius:50%;
-    animation:spin .7s linear infinite; }
+  /* The pressed button's own spinner comes from Loader.html (withLoader). */
 
   .card-error { display:flex; align-items:flex-start; gap:var(--space-2);
     margin:0 14px 12px 17px; padding:9px 11px; background:var(--state-stop-soft);
@@ -348,6 +344,22 @@
   .focus-body { padding:18px var(--space-5) 20px; }
   .section-label { font:var(--fw-semibold) 10.5px var(--font-body); color:var(--ink-400);
                    letter-spacing:var(--ls-label); text-transform:uppercase; }
+
+  /* Request — what was asked and what was attached, above the conversation. */
+  .detail { margin-bottom:20px; padding-bottom:18px; border-bottom:1px solid var(--line-200); }
+  .detail-row { display:grid; grid-template-columns:132px minmax(0,1fr);
+                gap:var(--space-2) 14px; margin-top:10px; }
+  .detail-k { font:var(--fw-semibold) 11.5px/1.6 var(--font-body); color:var(--ink-400); }
+  .detail-v { font:13px/1.6 var(--font-body); color:var(--charcoal);
+              white-space:pre-wrap; overflow-wrap:anywhere; text-wrap:pretty; }
+  .attach { display:inline-flex; align-items:center; margin:0 6px 6px 0; padding:3px 10px;
+            border:1px solid var(--lime-line); border-radius:var(--radius-sm);
+            background:var(--lime-soft); color:var(--green-primary); text-decoration:none;
+            font:var(--fw-semibold) 12px/1.5 var(--font-body); white-space:nowrap; }
+  .attach:hover { border-color:var(--green-medium); }
+  .attach.plain { background:none; border-color:var(--line-200); color:var(--charcoal);
+                  font-weight:normal; white-space:normal; }
+  @media (max-width:760px) { .detail-row { grid-template-columns:1fr; gap:2px; } }
   .thread { display:flex; flex-direction:column; gap:14px; margin-top:14px; }
   .msg { display:flex; gap:11px; }
   .avatar { width:30px; height:30px; border-radius:50%; flex:none;

@@ -3,85 +3,57 @@
 <head>
 <base target="_top">
 <meta charset="utf-8">
-<?!= include('Tokens'); ?>
-<?!= include('Loader'); ?>
 <style>
-  /* Bulk Add — OneSapro design system. No brand values declared locally. */
-  *, *::before, *::after { box-sizing: border-box; }
-  [hidden] { display: none !important; }
-  body { font-family: var(--font-body); font-size: var(--fs-sm); color: var(--charcoal);
-         margin: 0; padding: var(--space-4); background: var(--green-wash);
-         line-height: var(--lh-normal); -webkit-font-smoothing: antialiased; }
-  :focus-visible { outline: none; box-shadow: var(--shadow-focus); border-radius: var(--radius-sm); }
+  :root { --primary:#76B900; --primary-dark:#5B9000; --danger:#c0392b; --warn:#e67e22; --text:#2c3e50; }
+  * { box-sizing: border-box; }
+  body { font-family: Arial, sans-serif; font-size: 13px; color: var(--text);
+         margin: 0; padding: 14px; background: #f5f6fa; }
 
-  h2 { font: var(--fw-bold) var(--fs-h4)/1.25 var(--font-heading);
-       letter-spacing: var(--ls-tight); margin: 0 0 var(--space-1); }
-  .hint { color: var(--ink-600); font-size: 12.5px; margin: 0 0 var(--space-3);
-          line-height: var(--lh-relaxed); }
-  .hint code { background: var(--white); border: 1px solid var(--line-200);
-               padding: 1px 5px; border-radius: 4px; font-family: ui-monospace, Menlo, monospace; }
+  h2 { font-size: 15px; margin: 0 0 4px; }
+  .hint { color: #666; font-size: 12px; margin-bottom: 10px; line-height: 1.5; }
+  .hint code { background: #eceff1; padding: 1px 5px; border-radius: 3px; }
 
-  textarea { width: 100%; height: 130px; padding: var(--space-3);
-             border: 1px dashed var(--line-200); border-radius: var(--radius-sm);
-             font-family: ui-monospace, Menlo, monospace; font-size: 12px;
-             white-space: pre; resize: vertical; background: var(--white);
-             color: var(--charcoal); }
-  textarea:focus { border-color: var(--green-medium); outline: none; }
+  textarea { width: 100%; height: 130px; padding: 10px; border: 1px dashed #adb5bd;
+             border-radius: 5px; font-family: Consolas, Monaco, monospace; font-size: 12px;
+             white-space: pre; resize: vertical; }
+  textarea:focus { border-color: var(--primary); outline: none; }
 
-  .toolbar { display: flex; gap: var(--space-2); align-items: center;
-             margin: var(--space-3) 0; flex-wrap: wrap; }
-  button { border-radius: var(--radius-sm); padding: 8px var(--space-4); cursor: pointer;
-           font: var(--fw-semibold) 12px var(--font-body); font-family: var(--font-body); }
+  .toolbar { display: flex; gap: 8px; align-items: center; margin: 10px 0; flex-wrap: wrap; }
+  button { border: none; border-radius: 4px; padding: 8px 15px; cursor: pointer;
+           font-size: 12px; font-weight: bold; }
   button:disabled { opacity: .4; cursor: not-allowed; }
-  .btn-check  { background: var(--white); color: var(--green-primary);
-                border: 1px solid var(--line-200); }
-  .btn-check:hover:not(:disabled) { background: var(--lime-soft); border-color: var(--lime-line); }
-  /* The one filled primary on this surface. */
-  .btn-import { background: var(--green-primary); color: var(--text-on-green);
-                border: 1px solid var(--green-primary); border-radius: var(--radius-pill);
-                padding: 8px var(--space-5); }
-  .btn-import:hover:not(:disabled) { background: var(--green-primary-700); }
-  .btn-clear  { background: var(--white); color: var(--ink-600); border: 1px solid var(--line-200); }
-  .btn-clear:hover:not(:disabled) { border-color: var(--state-stop); color: var(--state-stop); }
+  .btn-check  { background: #e3f2fd; color: #1976d2; border: 1px solid #90caf9; }
+  .btn-import { background: var(--primary); color: #fff; }
+  .btn-clear  { background: #ffebee; color: #c62828; border: 1px solid #ef9a9a; }
   .spacer { flex: 1; }
-  .summary { font: var(--fw-semibold) 12px var(--font-body); }
-  .summary .ok  { color: var(--green-primary); }
-  .summary .bad { color: var(--state-stop); }
 
-  .results { max-height: 300px; overflow: auto; background: var(--white);
-             border: 1px solid var(--line-200); border-radius: var(--radius-md); }
-  table { border-collapse: collapse; width: 100%; }
-  th { text-align: left; font: var(--fw-semibold) 10.5px var(--font-body);
-       letter-spacing: var(--ls-label); text-transform: uppercase;
-       color: var(--text-on-green); padding: 9px 11px; white-space: nowrap;
-       background: var(--green-primary); position: sticky; top: 0; }
-  td { padding: 9px 11px; border-bottom: 1px solid var(--line-100);
-       vertical-align: top; font-size: 12px; }
-  tr:last-child td { border-bottom: none; }
-  tr.row-error td   { background: var(--state-stop-soft); }
-  tr.row-warning td { background: var(--state-warn-soft); }
+  .summary { font-size: 12px; font-weight: bold; }
+  .summary .ok  { color: var(--primary-dark); }
+  .summary .bad { color: var(--danger); }
 
-  .tag { display: inline-block; padding: 2px 8px; border-radius: var(--radius-pill);
-         font: var(--fw-semibold) 10px var(--font-body); text-transform: uppercase;
-         letter-spacing: .05em; white-space: nowrap; }
-  .t-ok   { background: var(--lime-soft);       color: var(--green-primary); }
-  .t-warn { background: var(--state-warn-soft); color: var(--state-warn); }
-  .t-err  { background: var(--state-stop-soft); color: var(--state-stop); }
+  .results { max-height: 300px; overflow: auto; background: #fff;
+             border: 1px solid #e0e0e0; border-radius: 5px; }
+  table { width: 100%; border-collapse: collapse; }
+  th { position: sticky; top: 0; background: #2d7d32; color: #fff; text-align: left;
+       padding: 7px 9px; font-size: 11px; text-transform: uppercase; letter-spacing: .4px; }
+  td { padding: 7px 9px; border-bottom: 1px solid #eee; vertical-align: top; font-size: 12px; }
+  tr.row-error td   { background: #fdecea; }
+  tr.row-warning td { background: #fff8e1; }
+  .tag { display: inline-block; padding: 1px 7px; border-radius: 9px;
+         font-size: 10px; font-weight: bold; text-transform: uppercase; }
+  .tag-ok    { background: #e8f5e9; color: var(--primary-dark); }
+  .tag-warn  { background: #fff3e0; color: var(--warn); }
+  .tag-error { background: #fde8e8; color: var(--danger); }
   .msg { margin: 3px 0 0; padding-left: 14px; font-size: 11px; }
-  .msg.err  { color: var(--state-stop); }
-  .msg.warn { color: var(--state-warn); }
-  .lineno { color: var(--ink-400); font-variant-numeric: tabular-nums;
-            font-family: ui-monospace, Menlo, monospace; }
-  .txt { min-width: 0; overflow-wrap: anywhere; }
+  .msg.err  { color: var(--danger); }
+  .msg.warn { color: #b26a00; }
+  .lineno { color: #999; font-variant-numeric: tabular-nums; }
 
-  .banner { display: none; margin-top: var(--space-3); padding: 11px var(--space-3);
-            border-radius: var(--radius-md); font-size: 12px; white-space: pre-line; }
-  .banner.success { background: var(--lime-soft); color: var(--green-primary);
-                    border: 1px solid var(--lime-line); }
-  .banner.error   { background: var(--state-stop-soft); color: var(--state-stop);
-                    border: 1px solid var(--state-stop); }
-  .banner.busy    { background: var(--green-wash); color: var(--ink-600);
-                    border: 1px solid var(--line-200); }
+  .banner { display: none; margin-top: 10px; padding: 11px 13px;
+            border-radius: 5px; font-size: 12px; white-space: pre-line; }
+  .banner.success { background: #e8f5e9; color: #2e7d32; border: 1px solid #a5d6a7; }
+  .banner.error   { background: #fdecea; color: #c62828; border: 1px solid #ef9a9a; }
+  .banner.busy    { background: #e3f2fd; color: #1565c0; border: 1px solid #90caf9; }
 </style>
 </head>
 <body>
@@ -91,9 +63,6 @@
   Paste one tab-separated line per task — the same 23-column format the
   <b>Copy AI Prompt</b> button produces. A header row is ignored if present.
   Task IDs are allocated here; leave column&nbsp;1 as <code>[AUTO]</code>.<br>
-  <b>Logging work that is already finished?</b> Fill Date (<code>2026-09-10 12:16</code>),
-  Status <code>Done</code>, Completed Date and Time, and optionally Time Spent in hours.
-  Leave those blank for new work — it is then created now, as New.<br>
   Nothing is written until you press <b>Import</b>, and Import stays locked while any row has an error.
 </p>
 
@@ -153,20 +122,10 @@ function runValidate() {
   var text = el('paste').value;
   if (!text.trim()) { setBanner('Paste something first.', 'error'); return; }
 
-  // withLoader before busy(): busy() disables both buttons, and the loader has
-  // to record them as they were. done() then runs first in each handler so it
-  // cannot re-enable Import after the handler has decided it should be off.
-  var done = withLoader(el('checkBtn'));
-  if (!done) return;
-
   busy(true, 'Checking rows…');
   google.script.run
-    .withSuccessHandler(function (res) { done(); onValidated(res); })
-    .withFailureHandler(function (err) {
-      done();
-      busy(false);
-      setBanner('Check failed: ' + ((err && err.message) || 'the server did not respond'), 'error');
-    })
+    .withSuccessHandler(onValidated)
+    .withFailureHandler(function (err) { busy(false); setBanner('Check failed: ' + err.message, 'error'); })
     .validateBulkRows(text);
 }
 
@@ -258,18 +217,10 @@ function runImport() {
     return;
   }
 
-  var done = withLoader(el('importBtn'));
-  if (!done) return;
-
   busy(true, 'Writing to Master… do not close this dialog.');
   google.script.run
-    .withSuccessHandler(function (res) { done(); onImported(res); })
-    .withFailureHandler(function (err) {
-      done();
-      busy(false);
-      setBanner('Import failed: ' + ((err && err.message) || 'the server did not respond') +
-                '\nCheck Master before retrying — a timeout can still have written the rows.', 'error');
-    })
+    .withSuccessHandler(onImported)
+    .withFailureHandler(function (err) { busy(false); setBanner('Import failed: ' + err.message, 'error'); })
     .commitBulkRows(lastValidatedText);
 }
 

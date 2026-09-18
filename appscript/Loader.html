@@ -1,0 +1,82 @@
+<!--
+  Button loader — shared by every page. Include straight after Tokens:
+      <?!= include('Loader'); ?>
+
+  THE RULE: every button that starts server work goes through withLoader().
+
+      var done = withLoader(btn);        // or withLoader(btn, container)
+      if (!done) return;                 // already running — the second click does nothing
+      google.script.run
+        .withSuccessHandler(function (r) { done(); ... })
+        .withFailureHandler(function (e) { done(); ... })
+        .someServerCall();
+
+  - Call done() FIRST in both handlers. It puts `disabled` back the way it
+    found it, so anything the handler sets afterwards (Import staying off once
+    the rows are written) is not undone by it.
+  - Pass a container to lock its other buttons too — a card's Start, Pause
+    and Done must not all fire at once.
+  - done() is safe to call twice.
+-->
+<style>
+  button.is-loading,
+  button.is-loading:disabled {
+    position: relative;
+    color: transparent !important;   /* the label keeps its width, so nothing jumps */
+    cursor: progress !important;
+    opacity: 1 !important;           /* busy is not the same as unavailable */
+    pointer-events: none;
+  }
+  button.is-loading > * { visibility: hidden; }
+  /* Positioned from the centre with a fixed size and a negative margin rather
+     than inset:0 + margin:auto — if a size ever fails to apply, inset:0
+     stretches the ring across the whole button's container. */
+  button.is-loading::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 14px;
+    height: 14px;
+    margin: -7px 0 0 -7px;
+    border: 2px solid var(--loader-ink, currentColor);
+    border-right-color: transparent;
+    border-radius: 50%;
+    animation: loader-spin .7s linear infinite;
+  }
+  @keyframes loader-spin { to { transform: rotate(360deg); } }
+</style>
+<script>
+/**
+ * Puts a button into its loading state and returns the function that ends it,
+ * or null when that button is already loading.
+ */
+function withLoader(btn, container) {
+  if (!btn || btn.getAttribute('aria-busy') === 'true') return null;
+
+  var locked = [btn];
+  if (container) {
+    Array.prototype.forEach.call(container.querySelectorAll('button'), function (b) {
+      if (b !== btn) locked.push(b);
+    });
+  }
+  var was = locked.map(function (b) { return b.disabled; });
+
+  // The ring is drawn in the button's own text colour, read before the label
+  // goes transparent — white on the green buttons, green on the quiet ones.
+  btn.style.setProperty('--loader-ink', getComputedStyle(btn).color);
+  btn.setAttribute('aria-busy', 'true');
+  btn.classList.add('is-loading');
+  locked.forEach(function (b) { b.disabled = true; });
+
+  var ended = false;
+  return function done() {
+    if (ended) return;
+    ended = true;
+    btn.removeAttribute('aria-busy');
+    btn.classList.remove('is-loading');
+    btn.style.removeProperty('--loader-ink');
+    locked.forEach(function (b, i) { b.disabled = was[i]; });
+  };
+}
+</script>

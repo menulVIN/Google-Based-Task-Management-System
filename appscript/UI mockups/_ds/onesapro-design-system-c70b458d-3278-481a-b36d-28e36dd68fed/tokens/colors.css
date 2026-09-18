@@ -1,0 +1,52 @@
+/* OneSapro — Color tokens
+   Official brand palette, confirmed June 2026.
+   Green ecosystem for OneSapro; orange reserved for Texonic only. */
+:root {
+  /* ---- Brand greens (base) ---- */
+  --green-primary: #00712D;   /* Primary Green — hero backgrounds, key surfaces */
+  --green-lime: #7EC60F;      /* Lime Green — labels, accents, CTA highlights */
+  --green-medium: #5FA201;    /* Medium Green — secondary accents, dividers */
+  --green-forest: #1D5D4B;    /* Deep Forest — dark dividers, shadow tones */
+
+  /* Lime/green tints & shades (derived, harmonious) */
+  --green-primary-700: #005A24;
+  --green-primary-900: #00481D;
+  --lime-soft: #EAF6D8;       /* pale lime wash for light backgrounds */
+  --green-wash: #F0F6F1;      /* faint green-tinted surface */
+
+  /* ---- Neutrals ---- */
+  --charcoal: #323232;        /* body text on light */
+  --ink-800: #2A2A2A;
+  --ink-600: #4A4A4A;
+  --ink-400: #8A8E8B;
+  --line-200: #E2E7E2;
+  --line-100: #EEF1EE;
+  --white: #FFFFFF;
+  --off-white: #F8FAF7;
+
+  /* ---- Texonic (parent brand only — never mix with OneSapro greens) ---- */
+  --texonic-orange: #ED7A1F;
+
+  /* ---- Semantic aliases ---- */
+  --color-bg: var(--white);
+  --color-bg-muted: var(--off-white);
+  --color-surface: var(--white);
+  --color-surface-green: var(--green-primary);
+  --color-surface-wash: var(--green-wash);
+
+  --text-strong: var(--charcoal);
+  --text-body: var(--ink-600);
+  --text-muted: var(--ink-400);
+  --text-on-green: var(--white);
+  --text-accent: var(--green-medium);
+
+  --color-accent: var(--green-lime);
+  --color-accent-strong: var(--green-medium);
+  --color-primary: var(--green-primary);
+
+  --border-subtle: var(--line-200);
+  --border-strong: var(--charcoal);
+  --divider-on-green: rgba(126,198,15,0.45);
+
+  --focus-ring: var(--green-lime);
+}

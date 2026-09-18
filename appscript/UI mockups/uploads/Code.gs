@@ -48,13 +48,6 @@ var MANAGER_EMAILS = [
 
 var MASTER_SHEET_NAME    = 'Master';
 var SUPPORT_SHEET_NAME   = 'Support Tracker';
-var COMMENTS_SHEET_NAME  = 'Comments';
-
-/** Minutes credited to a task when someone posts an update on it. */
-var COMMENT_LOGS_MINUTES = 15;
-
-/** No note and no status change for this long on a running task triggers the nudge. */
-var CHECKIN_IDLE_HOURS = 4;
 var ATTACHMENT_FOLDER_ID = '1o-YGGzVR3VjXoMFmX1hAl7usJ2OUBcoy';
 
 var MASTER_COL_TASK_ID  = 1;
@@ -114,14 +107,7 @@ var PROTECTION_TAG = 'Tracker — automated columns locked';
 
 /** Single source of truth for every dropdown: sheet, form, and bulk import. */
 var ALLOWED = {
-  /**
-   * These are the statuses actually in the sheet, in the sheet's own order.
-   * "On Hold" and "Awaiting Info" are long-standing values; leaving them out
-   * would make every row that uses one unwritable, because a strict rule makes
-   * setValues throw — which would break row copies and the sync audit.
-   * "Blocked" is the one addition, and nothing has used it yet.
-   */
-  status:   ['New', 'In Progress', 'On Hold', 'Awaiting Info', 'Paused', 'Done', 'Blocked'],
+  status:   ['New', 'In Progress', 'Paused', 'Done', 'Blocked'],
   priority: ['Critical', 'High', 'Medium', 'Low'],
   planned:  ['Unplanned', 'Planned'],   // order matches the form people are used to
   svn:      ['Yes', 'No'],
@@ -208,7 +194,7 @@ var DASHBOARD_MAX_TASKS = 400;
  * UNITS. Column 9 is headed "Total Time Spent (Hrs)" but stores a DAY FRACTION,
  * because Sheets duration formatting works in days. 0.25 means six hours, not
  * fifteen minutes. Any KPI formula reading the raw cell must multiply by 24.
- * Use readStoredHours_() to read and write plain hours. Never assume
+ * Use toDayFraction_() to read and divide hours by 24 to write. Never assume
  * the cell is a plain number — a duration-formatted cell returns a Date.
  *
  * MEASUREMENT. Elapsed time is wall-clock between Start and the next status
@@ -289,410 +275,13 @@ function allTaskSheetNames_() {
 }
 
 /** Duration cells come back as Date. Normalise to a day fraction before adding. */
-/**
- * Reads column 9 as DECIMAL HOURS.
- *
- * 2.5 means two and a half hours. The column used to hold a day fraction
- * (0.25 = six hours) because Sheets duration formatting works in days, which
- * meant the header said "(Hrs)" while SUM() returned a twenty-fourth of the
- * real figure. Storing hours makes the header true and the KPI arithmetic
- * plain. migrateTimeToHours() converts the historical values once.
- *
- * A duration-FORMATTED cell still hands back a Date, so that case is converted
- * from days to hours here.
- */
-function readStoredHours_(value) {
+function toDayFraction_(value) {
   if (value instanceof Date) {
-    // Sheets stores a duration as an offset from 1899-12-30, so 8h is
-    // 1899-12-30T08:00 and even a year of work stays inside 1900. A Date in
-    // any later year is a CALENDAR date somebody put in the time column, not a
-    // duration — converting it gives ~46,000 days, which is where the
-    // 1,110,242h on the dashboard came from. Log it and count nothing.
-    if (value.getFullYear() >= 1950) {
-      Logger.log('Ignoring a calendar date in the time column: ' + value);
-      return 0;
-    }
     var base = new Date(1899, 11, 30);
-    return ((value.getTime() - base.getTime()) / (24 * 60 * 60 * 1000)) * 24;
+    return (value.getTime() - base.getTime()) / (24 * 60 * 60 * 1000);
   }
-  if (typeof value === 'number') return isFinite(value) ? value : 0;
-
-  // Older rows hold text like "2 Hours" or "mora than a Day" from a legacy
-  // dropdown. parseFloat("2 Hours") is 2, which would silently become 2 hours
-  // of work nobody logged. Only a bare number counts.
-  var s = String(value == null ? '' : value).trim();
-  if (!s) return 0;
-  if (!/^-?\d+(\.\d+)?$/.test(s)) {
-    Logger.log('Ignoring non-numeric time value: "' + s + '"');
-    return 0;
-  }
-  var n = parseFloat(s);
-  return isFinite(n) ? n : 0;
-}
-
-/** Kept for the historical backfill script, which still works in day fractions. */
-function toDayFraction_(value) { return readStoredHours_(value) / 24; }
-
-var PROP_TIME_IN_HOURS = 'TIME_MIGRATED_TO_HOURS';
-
-/**
- * The day fraction held by an OLD duration cell, or null for anything else.
- *
- * Only a duration-formatted cell counts. Sheets hands those back as a Date near
- * 1899-12-30, and nothing this code writes today is ever a Date — writeHours_
- * and Bulk Add store plain numbers in a 0.00 format. So a Date before 1950 can
- * only be old data.
- *
- * Plain numbers are deliberately NOT treated as day fractions any more. Since
- * time moved to hours, every banked session is a plain number of hours, and a
- * number cannot say which kind it is: converting them all multiplied real
- * hours by 24. A calendar date (1950 on) is not a duration either — converting
- * one wrote ~1,110,000 hours into the cell.
- */
-function rawDayFraction_(value) {
-  if (!(value instanceof Date) || value.getFullYear() >= 1950) return null;
-  var base = new Date(1899, 11, 30);
-  return (value.getTime() - base.getTime()) / (24 * 60 * 60 * 1000);
-}
-
-/**
- * Admin > Check Time Tracking. Reads the live sheet and reports everything that
- * makes recorded hours wrong or incomplete, so it is caught before it reaches a
- * KPI. Changes nothing.
- *
- * Each section is something the timer cannot fix on its own:
- *   - the sheet and the script in different time zones, which shifts every time
- *   - one person with several timers running, each counting the same hours
- *   - a timer running past MAX_SESSION_HOURS, which will be capped when it stops
- *   - In Progress with no session clock, so nothing will bank
- *   - a session clock left on a task that is no longer In Progress — time lost
- *   - a team tab disagreeing with Master on status or hours
- *   - sessions already capped, whose real length is unknown
- *   - recently finished tasks with no time at all
- */
-function checkTimeTracking() {
-  var ui = SpreadsheetApp.getUi();
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var master = ss.getSheetByName(MASTER_SHEET_NAME);
-  var NL = String.fromCharCode(10);
-  var tz = Session.getScriptTimeZone();
-
-  var last = getRealLastRow(master);
-  if (last < 2) { ui.alert('Time tracking', 'Master has no tasks.', ui.ButtonSet.OK); return; }
-
-  var width = Math.max(master.getLastColumn(), SESSION_START_COL);
-  var head  = master.getRange(1, 1, 1, width).getValues()[0].map(function (h) { return String(h).trim(); });
-  var data  = master.getRange(2, 1, last - 1, width).getValues();
-  var notes = master.getRange(2, TOTAL_TIME_COL, last - 1, 1).getNotes();
-
-  var now = Date.now(), HOUR = 3600000;
-  var recent = now - DONE_WINDOW_DAYS * 24 * HOUR;
-  var estCol = head.indexOf('Estimated Duration (Minutes)');
-  var actCol = head.indexOf('Actual Duration (Minutes)');
-
-  var running = {}, overCap = [], notTicking = [], lostSessions = [], capped = [];
-  var noTime = {}, noTimeTotal = 0, notHours = 0, estFilled = 0, actFilled = 0, byId = {};
-
-  data.forEach(function (r, i) {
-    var id = String(r[0]).trim();
-    if (!id) return;
-    byId[id] = r;
-    var who = String(r[MASTER_COL_ASSIGNED - 1]).trim() || '(unassigned)';
-    var status = String(r[SYNC_COLUMNS['Status'] - 1]).trim();
-    var start = r[SESSION_START_COL - 1];
-    var label = id + ' (' + who + ')';
-
-    if (status === 'In Progress') {
-      (running[who] = running[who] || []).push(id);
-      if (!(start instanceof Date)) {
-        notTicking.push(label);
-      } else if ((now - start.getTime()) / HOUR > MAX_SESSION_HOURS) {
-        overCap.push(label + ' running ' + Math.round((now - start.getTime()) / HOUR) + 'h since ' +
-                     Utilities.formatDate(start, tz, 'd MMM HH:mm'));
-      }
-    } else if (start instanceof Date) {
-      lostSessions.push(label + ' is ' + (status || 'blank') + ', session from ' +
-                        Utilities.formatDate(start, tz, 'd MMM HH:mm') + ' never banked');
-    }
-
-    var note = String(notes[i][0] || '');
-    if (/capped/i.test(note)) capped.push(label + ': ' + note.split(NL)[0]);
-
-    var t = r[TOTAL_TIME_COL - 1];
-    if (t !== '' && typeof t !== 'number' && readStoredHours_(t) === 0) notHours++;
-
-    var finished = realDate_(r[SYNC_COLUMNS['Completed Date'] - 1]);
-    if (status === 'Done' && finished && finished.getTime() >= recent && readStoredHours_(t) === 0) {
-      noTime[who] = (noTime[who] || 0) + 1;
-      noTimeTotal++;
-    }
-    if (estCol !== -1 && r[estCol] !== '') estFilled++;
-    if (actCol !== -1 && r[actCol] !== '') actFilled++;
-  });
-
-  var multi = Object.keys(running)
-    .filter(function (w) { return running[w].length > 1; })
-    .map(function (w) { return w + ': ' + running[w].length + ' running at once — ' + running[w].join(', '); });
-
-  var disagree = [];
-  DEVELOPER_SHEET_NAMES.forEach(function (name) {
-    var tab = ss.getSheetByName(name);
-    if (!tab) return;
-    var tl = getRealLastRow(tab);
-    if (tl < 2) return;
-    tab.getRange(2, 1, tl - 1, SYNC_COLUMNS['Status']).getValues().forEach(function (tr) {
-      var id = String(tr[0]).trim();
-      var m = byId[id];
-      if (!id || !m) return;
-      var ts = String(tr[SYNC_COLUMNS['Status'] - 1]).trim(), ms = String(m[SYNC_COLUMNS['Status'] - 1]).trim();
-      var th = readStoredHours_(tr[TOTAL_TIME_COL - 1]), mh = readStoredHours_(m[TOTAL_TIME_COL - 1]);
-      if (ts !== ms) disagree.push(name + ' ' + id + ': tab says ' + (ts || 'blank') + ', Master says ' + (ms || 'blank'));
-      else if (Math.abs(th - mh) > 0.01) disagree.push(name + ' ' + id + ': tab ' + th.toFixed(2) + 'h, Master ' + mh.toFixed(2) + 'h');
-    });
-  });
-
-  var out = [], clean = [];
-  function section(title, items, fix) {
-    if (!items.length) { clean.push(title); return; }
-    out.push(title.toUpperCase() + ' — ' + items.length);
-    items.slice(0, 10).forEach(function (s) { out.push('   ' + s); });
-    if (items.length > 10) out.push('   …and ' + (items.length - 10) + ' more');
-    out.push('   Fix: ' + fix, '');
-  }
-
-  var sheetTz = ss.getSpreadsheetTimeZone();
-  if (sheetTz !== tz) {
-    out.push('TIME ZONES DIFFER — sheet ' + sheetTz + ', script ' + tz,
-             '   Every recorded time is shifted by the difference.',
-             '   Fix: set both to the office zone — File > Settings, and Project Settings in Apps Script.', '');
-  } else {
-    clean.push('time zones (' + tz + ')');
-  }
-
-  section('Several timers per person', multi,
-    'pause all but the task being worked on. Each running timer counts the same hours.');
-  section('Timers past ' + MAX_SESSION_HOURS + 'h', overCap,
-    'probably left running. It will bank only ' + MAX_SESSION_HOURS + 'h — pause it and correct the hours by hand.');
-  section('In Progress without a running clock', notTicking,
-    'set it to Paused, then back to In Progress, so the clock starts.');
-  section('Sessions never banked', lostSessions,
-    'the time in these sessions is missing from column 9. Add it by hand, then clear the Session Start cell.');
-  section('Team tab and Master disagree', disagree,
-    'Master is the record. Set the tab to match, one cell at a time.');
-  section('Sessions capped at ' + MAX_SESSION_HOURS + 'h', capped,
-    'the real length is unknown. Confirm with the person and correct column 9.');
-
-  if (noTimeTotal) {
-    out.push('FINISHED IN THE LAST ' + DONE_WINDOW_DAYS + ' DAYS WITH NO TIME — ' + noTimeTotal);
-    Object.keys(noTime).sort(function (a, b) { return noTime[b] - noTime[a]; })
-      .forEach(function (w) { out.push('   ' + w + ': ' + noTime[w]); });
-    out.push('   These were marked Done without the timer ever running.', '');
-  } else {
-    clean.push('finished tasks all have time');
-  }
-
-  if (notHours) out.push('Column 9 holds ' + notHours + ' value(s) that are not hours — Admin > Check Time Column lists them.', '');
-
-  if (estCol !== -1 || actCol !== -1) {
-    out.push('OFFICE ESTIMATE / ACTUAL COLUMNS',
-             '   Estimated Duration (Minutes) filled on ' + estFilled + ' of ' + (last - 1) + ' rows',
-             '   Actual Duration (Minutes) filled on ' + actFilled + ' of ' + (last - 1) + ' rows',
-             '   The timer does not write these yet — it records hours in column 9.', '');
-  }
-
-  if (clean.length) out.push('No problems: ' + clean.join(' · '));
-  ui.alert('Time tracking check', out.join(NL), ui.ButtonSet.OK);
-}
-
-/**
- * Lists every row whose time cell holds something that is not hours.
- *
- * readStoredHours_ counts these as zero rather than guessing, so they are
- * invisible on the dashboard — which is right for the total but useless for
- * finding them. Two kinds turn up: a CALENDAR DATE (the cell was formatted or
- * filled as a date, and reading it as a duration is what produced the
- * 1,110,242h figure) and legacy dropdown TEXT such as "6 hours" or "Two Days".
- */
-function checkTimeColumn() {
-  var ui = SpreadsheetApp.getUi();
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var NL = String.fromCharCode(10);
-  var dates = [], texts = [], counted = 0;
-
-  [MASTER_SHEET_NAME].concat(allTaskSheetNames_()).forEach(function (name) {
-    var sheet = ss.getSheetByName(name);
-    if (!sheet) return;
-    var last = getRealLastRow(sheet);
-    if (last < 2) return;
-
-    var ids   = sheet.getRange(2, MASTER_COL_TASK_ID, last - 1, 1).getValues();
-    var times = sheet.getRange(2, TOTAL_TIME_COL,     last - 1, 1).getValues();
-
-    for (var i = 0; i < times.length; i++) {
-      var v = times[i][0];
-      if (v === '' || v == null) continue;
-      var where = name + ' ' + colLetter_(TOTAL_TIME_COL) + (i + 2) +
-                  '  ' + String(ids[i][0]).trim();
-
-      if (v instanceof Date) {
-        if (v.getFullYear() >= 1950) {
-          dates.push(where + '  =  ' +
-            Utilities.formatDate(v, Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm'));
-        } else { counted++; }
-      } else if (typeof v === 'number') {
-        counted++;
-      } else if (!/^-?\d+(\.\d+)?$/.test(String(v).trim())) {
-        texts.push(where + '  =  "' + String(v).trim() + '"');
-      } else { counted++; }
-    }
-  });
-
-  if (!dates.length && !texts.length) {
-    ui.alert('Time column', counted + ' row(s) hold real hours. Nothing to clean.',
-             ui.ButtonSet.OK);
-    return;
-  }
-
-  var msg = counted + ' row(s) hold real hours.' + NL + NL;
-  if (dates.length) {
-    msg += 'CALENDAR DATES — ' + dates.length + ' cell(s). Clear these; the time ' +
-           'was never recorded and the date means nothing here:' + NL + '  ' +
-           dates.slice(0, 25).join(NL + '  ') +
-           (dates.length > 25 ? NL + '  ...and ' + (dates.length - 25) + ' more' : '') +
-           NL + NL;
-  }
-  if (texts.length) {
-    msg += 'TEXT — ' + texts.length + ' cell(s) from the old dropdown. Replace each ' +
-           'with a plain number of hours (6 hours becomes 6), or clear it if nobody ' +
-           'knows:' + NL + '  ' +
-           texts.slice(0, 25).join(NL + '  ') +
-           (texts.length > 25 ? NL + '  ...and ' + (texts.length - 25) + ' more' : '') +
-           NL + NL;
-  }
-  msg += 'All of these count as zero today, so no KPI is overstated — the time is ' +
-         'just missing, and Convert Old Duration Time to Hours never touches them.';
-
-  ui.alert('Time column needs cleaning', msg, ui.ButtonSet.OK);
-}
-
-/**
- * Converts OLD duration cells in column 9 to decimal hours, on Master and every
- * task tab.
- *
- * Only cells rawDayFraction_ recognises as old durations are touched. Plain
- * numbers are hours already and are left alone, and so are calendar dates and
- * text, which Check Time Column lists for cleaning by hand. A converted cell
- * becomes a plain number and is never picked up again, so this is safe to run
- * twice — which the old version, converting every number, was not: once live
- * sessions started banking hours, running it would have multiplied them by 24.
- *
- * The write happens under the script lock, so a session banked while this runs
- * cannot be overwritten, and only the converted cells are written — in
- * contiguous runs, so a formula or a hand-entered value elsewhere is untouched.
- */
-function migrateTimeToHours() {
-  var ui = SpreadsheetApp.getUi();
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var sheets = [MASTER_SHEET_NAME].concat(allTaskSheetNames_());
-
-  var plan = [], total = 0, numbers = 0, other = 0;
-  sheets.forEach(function (name) {
-    var sheet = ss.getSheetByName(name);
-    if (!sheet) return;
-    var last = getRealLastRow(sheet);
-    if (last < 2) return;
-
-    var vals = sheet.getRange(2, TOTAL_TIME_COL, last - 1, 1).getValues();
-    var n = 0, sample = [];
-    for (var i = 0; i < vals.length; i++) {
-      var v = vals[i][0];
-      if (v === '' || v == null) continue;
-      var frac = rawDayFraction_(v);
-      if (frac !== null) {
-        n++;
-        if (sample.length < 3) {
-          sample.push(colLetter_(TOTAL_TIME_COL) + (i + 2) + ' = ' + (frac * 24).toFixed(2) + 'h');
-        }
-      } else if (typeof v === 'number') {
-        numbers++;
-      } else {
-        other++;
-      }
-    }
-    total += n;
-    if (n) plan.push('  ' + name + ': ' + n + ' cell(s)   e.g. ' + sample.join(' · '));
-  });
-
-  var leftAlone = numbers + ' plain number(s) are hours already and are left alone.' +
-    (other ? '\n' + other + ' calendar date(s) or text value(s) are left alone — ' +
-             'Admin > Check Time Column lists them.' : '');
-
-  if (!total) {
-    ui.alert('Nothing to convert',
-      'No old duration cells were found in column 9.\n\n' + leftAlone, ui.ButtonSet.OK);
-    return;
-  }
-
-  var go = ui.alert('Convert old duration cells to hours?',
-    total + ' cell(s) still hold time in the old duration format, which counts in days.\n' +
-    'Each is rewritten as decimal hours (a quarter of a day becomes 6.00).\n\n' +
-    plan.join('\n') + '\n\n' + leftAlone + '\n\n' +
-    'MAKE A COPY OF THE SHEET FIRST (File > Make a copy).\n\nProceed?',
-    ui.ButtonSet.YES_NO);
-  if (go !== ui.Button.YES) return;
-
-  var lock = LockService.getScriptLock();
-  try {
-    lock.waitLock(30000);
-  } catch (busy) {
-    ui.alert('The tracker is busy saving time right now. Nothing was changed — try again in a minute.');
-    return;
-  }
-
-  var done = [];
-  try {
-    sheets.forEach(function (name) {
-      var sheet = ss.getSheetByName(name);
-      if (!sheet) return;
-      var last = getRealLastRow(sheet);
-      if (last < 2) return;
-
-      // Read again inside the lock: a session may have banked since the preview.
-      var vals = sheet.getRange(2, TOTAL_TIME_COL, last - 1, 1).getValues();
-      var n = 0, run = null;
-
-      function flush() {
-        if (!run) return;
-        sheet.getRange(run.start + 2, TOTAL_TIME_COL, run.values.length, 1)
-             .setNumberFormat('0.00')
-             .setValues(run.values);
-        run = null;
-      }
-
-      for (var i = 0; i < vals.length; i++) {
-        var frac = rawDayFraction_(vals[i][0]);
-        if (frac === null) { flush(); continue; }
-        var hours = Math.round(frac * 24 * 100) / 100;
-        if (run) run.values.push([hours]);
-        else run = { start: i, values: [[hours]] };
-        n++;
-      }
-      flush();
-      if (n) done.push(name + ' (' + n + ')');
-    });
-    SpreadsheetApp.flush();
-  } finally {
-    lock.releaseLock();
-  }
-
-  PropertiesService.getScriptProperties().setProperty(PROP_TIME_IN_HOURS,
-    Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd HH:mm'));
-
-  ui.alert('Converted to hours',
-    'Updated: ' + done.join(', ') + '\n\n' +
-    'Those cells now hold decimal hours — 2.5 means 2h 30m. Point KPI formulas\n' +
-    'straight at column 9; any old x24 correction in a formula must be removed.',
-    ui.ButtonSet.OK);
+  var n = parseFloat(value);
+  return isNaN(n) ? 0 : n;
 }
 
 // ---------------------------------------------------------------------------
@@ -743,88 +332,8 @@ function formatTaskId_(n) { return 'TASK-' + String(n).padStart(3, '0'); }
  * ?page=mytasks  → personal dashboard, usable without opening the spreadsheet
  * anything else  → new task submission form
  */
-/**
- * Every HTML partial the web pages depend on, with the size Apps Script sees.
- *
- * A page that renders blank is almost never a code fault — it is a partial that
- * was never pasted, or one the editor truncated on paste. Sizes make that
- * obvious: DashboardBody is tens of KB, so a few hundred bytes means truncated
- * and "MISSING" means the file is not in the project at all.
- */
-function webFilesReport_() {
-  var expect = [
-    ['Tokens',           60000],
-    ['DashboardStyles',  20000],
-    ['DashboardBody',    28000],
-    ['Index',            20000],
-    ['MyTasks',            300],
-    ['Sidebar',            120],
-    ['BulkAdd',           8000],
-    ['Loader',            1500]
-  ];
-  var lines = ['WEB APP FILES', ''];
-  var bad = 0;
-
-  for (var i = 0; i < expect.length; i++) {
-    var name = expect[i][0], floor = expect[i][1], size = -1, err = '';
-    try {
-      size = HtmlService.createHtmlOutputFromFile(name).getContent().length;
-    } catch (e) {
-      err = String(e && e.message ? e.message : e);
-    }
-    var verdict;
-    if (err)            { verdict = 'MISSING — not in this project'; bad++; }
-    else if (size < floor) { verdict = 'TOO SMALL — paste was truncated'; bad++; }
-    else                   { verdict = 'ok'; }
-    lines.push(pad_(name, 18) + (err ? '     —' : pad_(fmtKb_(size), 10)) + verdict);
-  }
-
-  // Which address the My Tasks and Open full page links will actually use.
-  // getUrl() returns a stale deployment id when the project has more than one,
-  // so a saved value always wins and the two are shown apart.
-  var saved = PropertiesService.getScriptProperties().getProperty(PROP_WEBAPP_URL);
-  var detected = '';
-  try { detected = ScriptApp.getService().getUrl() || ''; } catch (e) {}
-
-  lines.push('');
-  lines.push('WEB APP URL');
-  lines.push('  in use     ' + (webAppUrl_() || '(none — My Tasks link is hidden)'));
-  lines.push('  saved      ' + (saved || '(none)'));
-  lines.push('  detected   ' + (detected || '(none)'));
-  if (!saved) {
-    lines.push('  Not set, so the detected one is used. With several deployments');
-    lines.push('  that is often a dead one — set it via Admin > Set Web App URL.');
-  }
-
-  lines.push('');
-  lines.push(bad
-    ? bad + ' file(s) need re-pasting. Copy the whole file, select all in the '
-          + 'Apps Script editor (Ctrl+A) and paste over it, then Deploy > New version.'
-    : 'All files present and full size. If a page is still blank, the deployment '
-      + 'is serving an older version — Deploy > Manage deployments > edit > New version.');
-  return lines.join(String.fromCharCode(10));
-}
-
-function pad_(s, n) { s = String(s); while (s.length < n) s += ' '; return s; }
-function fmtKb_(n)  { return n < 1024 ? n + ' B' : Math.round(n / 1024) + ' KB'; }
-
-/** Admin > Check Web App Files. */
-function checkWebFiles() {
-  SpreadsheetApp.getUi().alert('Check Web App Files', webFilesReport_(),
-    SpreadsheetApp.getUi().ButtonSet.OK);
-}
-
 function doGet(e) {
   var page  = (e && e.parameter && e.parameter.page) || 'submit';
-
-  // ?page=diag renders nothing but a plain-text report of what the project
-  // actually contains. If a page comes up blank, this says whether a partial
-  // is missing, truncated, or simply was never pasted.
-  if (page === 'diag') {
-    return ContentService.createTextOutput(webFilesReport_())
-      .setMimeType(ContentService.MimeType.TEXT);
-  }
-
   var file  = (page === 'mytasks') ? 'MyTasks' : 'Index';
   var title = (page === 'mytasks') ? 'My Tasks' : 'New Task Submission';
 
@@ -858,11 +367,7 @@ function getFormConfig() {
     },
     email:     currentEmail_(),
     devName:   currentDevName_(),
-    isManager: isManager(),
-    // The form runs inside the googleusercontent sandbox frame, so a relative
-    // "?page=mytasks" resolves against THAT host and lands on a URL Google will
-    // not serve at top level. The link has to be the real /exec address.
-    webAppUrl: webAppUrl_()
+    isManager: isManager()
   };
 }
 
@@ -870,42 +375,24 @@ function getFormConfig() {
 // SINGLE TASK SUBMISSION
 // ---------------------------------------------------------------------------
 
-/**
- * Saving the task is the job. Attachments are an extra.
- *
- * Drive is therefore never touched unless something is actually being uploaded,
- * and a Drive failure downgrades to a warning on a saved task instead of
- * throwing the whole submission away. Reaching for the folder up front meant a
- * task with no attachments at all still died if the folder was unreachable.
- */
 function handleImageSubmission(data) {
-  var dropped = data.droppedFiles || [];
-  var pasted  = data.pastedImages || [];
-  var attachmentUrls = [], failedUploads = [], folderError = '';
+  var attachmentUrls = [], failedUploads = [];
 
-  if (dropped.length || pasted.length) {
-    var folder = null;
-    try {
-      folder = DriveApp.getFolderById(ATTACHMENT_FOLDER_ID);
-    } catch (err) {
-      folderError = 'The attachments folder could not be opened, so nothing was uploaded. ' +
-                    'Ask Venul to share it with you, or paste links instead. (' + err.message + ')';
-    }
+  try {
+    var folder = DriveApp.getFolderById(ATTACHMENT_FOLDER_ID);
 
-    if (folder) {
-      dropped.forEach(function (f) {
-        var url = uploadBase64ToDrive_(f.data, f.name, folder);
-        if (url) attachmentUrls.push(url); else failedUploads.push(f.name);
-      });
-      pasted.forEach(function (b64, i) {
-        var name = 'Screenshot_' + (i + 1) + '_' + sanitizeFilename_(data.client) + '.png';
-        var url = uploadBase64ToDrive_(b64, name, folder);
-        if (url) attachmentUrls.push(url); else failedUploads.push(name);
-      });
-    } else {
-      dropped.forEach(function (f) { failedUploads.push(f.name); });
-      pasted.forEach(function (_, i) { failedUploads.push('Screenshot ' + (i + 1)); });
-    }
+    (data.droppedFiles || []).forEach(function (f) {
+      var url = uploadBase64ToDrive_(f.data, f.name, folder);
+      if (url) attachmentUrls.push(url); else failedUploads.push(f.name);
+    });
+
+    (data.pastedImages || []).forEach(function (b64, i) {
+      var name = 'Screenshot_' + (i + 1) + '_' + sanitizeFilename_(data.client) + '.png';
+      var url = uploadBase64ToDrive_(b64, name, folder);
+      if (url) attachmentUrls.push(url); else failedUploads.push(name);
+    });
+  } catch (err) {
+    return { success: false, error: 'Attachment folder unreachable: ' + err.message };
   }
 
   var manual = data.attachmentText ? String(data.attachmentText).trim() : '';
@@ -914,38 +401,10 @@ function handleImageSubmission(data) {
   data.attachmentUrl = links;
 
   var result = processForm(data);
-
-  if (result.success && (failedUploads.length || folderError)) {
-    result.warning = 'Task saved. ' +
-      (folderError || 'These attachments did not upload: ' + failedUploads.join(', ')) +
-      (folderError && failedUploads.length ? ' Not uploaded: ' + failedUploads.join(', ') : '');
+  if (result.success && failedUploads.length) {
+    result.warning = 'Task saved, but these attachments failed to upload: ' + failedUploads.join(', ');
   }
   return result;
-}
-
-/**
- * Reports whether the signed-in user can actually write to the attachments
- * folder. With "Execute as: User accessing the web app" each person needs their
- * own access, so this is the first thing to check when uploads start failing.
- */
-function checkAttachmentFolder() {
-  var ui = SpreadsheetApp.getUi();
-  try {
-    var folder = DriveApp.getFolderById(ATTACHMENT_FOLDER_ID);
-    var name = folder.getName();
-    var probe = folder.createFile(Utilities.newBlob('ok', 'text/plain', '__access_probe.txt'));
-    probe.setTrashed(true);
-    ui.alert('Attachments folder OK\n\nFolder: ' + name + '\nId: ' + ATTACHMENT_FOLDER_ID +
-             '\n\nYou can read and write it. Uploads will work for you.');
-  } catch (e) {
-    ui.alert('Attachments folder NOT reachable\n\nId: ' + ATTACHMENT_FOLDER_ID +
-             '\n\n' + e.message +
-             '\n\nUsual causes:\n' +
-             '· the folder is not shared with this account (needs Editor)\n' +
-             '· the folder was moved to the bin\n' +
-             '· ATTACHMENT_FOLDER_ID in Code.gs is out of date\n\n' +
-             'Tasks still save without attachments — only uploads are affected.');
-  }
 }
 
 function uploadBase64ToDrive_(base64Data, fileName, folder) {
@@ -1013,51 +472,10 @@ function processForm(formData) {
 
     return { success: true, taskId: taskId };
   } catch (error) {
-    return { success: false, error: friendlyWriteError_(error) };
+    return { success: false, error: error.message };
   } finally {
     lock.releaseLock();
   }
-}
-
-/**
- * A strict dropdown on any task column makes setValues throw, and Sheets
- * reports it as a cell reference the submitter cannot act on. Name the real
- * cause instead.
- */
-/**
- * Never throws. It runs inside a catch block, so a fault here escapes as a bare
- * TypeError, crosses google.script.run with no .message, and the user is told
- * "Task NOT saved: undefined" — which says nothing and hides the real cause.
- * That is exactly what an unguarded cell.match()[0] did.
- */
-function friendlyWriteError_(error) {
-  var msg;
-  try {
-    msg = (error && error.message) ? String(error.message) : String(error);
-  } catch (e) {
-    msg = 'Unknown error';
-  }
-  if (!msg || msg === 'undefined' || msg === 'null') msg = 'Unknown error';
-
-  try {
-    if (/data validation/i.test(msg)) {
-      var cell = (msg.match(/cell\s+([A-Z]+\d+)/i) || [])[1] || '';
-      var col  = (cell.match(/^[A-Z]+/) || [''])[0];
-      var where = 'one of the columns';
-      if (col) {
-        var idx = 0;
-        for (var i = 0; i < col.length; i++) idx = idx * 26 + (col.charCodeAt(i) - 64);
-        where = '"' + (MASTER_HEADERS[idx - 1] || ('column ' + col)) + '"';
-      }
-      return 'The sheet is rejecting ' + where + ' because a dropdown on it is out of ' +
-             'date — it does not list everyone on the team. Ask Venul to run ' +
-             'Tracker Options > Admin > Refresh Dropdowns. Nothing was saved.\n\n' +
-             'Sheets said: ' + msg;
-    }
-  } catch (e) {
-    return msg;                     // fall back to the raw message rather than failing
-  }
-  return msg;
 }
 
 /** The one place that knows the 22-column row shape. */
@@ -1071,15 +489,12 @@ function buildRow_(taskId, timestamp, submitterEmail, assignedMember, d) {
     d.issueType || '',
     submitterEmail || '',
     assignedMember,
-    // 9, 12, 13 and 14 are the timer's to fill for live work. Only Bulk Add
-    // sets them, and only for work that is already finished; the form never
-    // sends these fields, so a submitted task still starts empty and New.
-    (typeof d.hours === 'number') ? d.hours : '',
+    '',                        //  9 approx time — filled by the timer
     d.deadlineDate || '',
     d.deadlineTime || '',
-    d.completedAt || '',       // 12 completed date — a Date, as applyStatusChange_ writes it
-    d.completedAt || '',       // 13 completed time — same Date, formatted as time in the sheet
-    d.status || 'New',
+    '',                        // 12 completed date
+    '',                        // 13 completed time
+    'New',
     d.plannedUnplanned || '',
     d.priorityStatus || '',
     d.remarks || '',
@@ -1099,6 +514,12 @@ function copyTaskToDevSheet_(ss, row, assignedMember) {
   return true;
 }
 
+function copyNewTaskToDevSheet(ss, row, assignedMember) {
+  var ok = copyTaskToDevSheet_(ss, row, assignedMember);
+  if (ok) SpreadsheetApp.flush();
+  return ok;
+}
+
 // ---------------------------------------------------------------------------
 // BULK IMPORT — the only sanctioned way to add many rows at once
 // ---------------------------------------------------------------------------
@@ -1110,29 +531,11 @@ function showBulkAddDialog() {
 }
 
 /**
- * Check a pasted block for the dialog. Returns the per-row verdict WITHOUT the
- * parsed data.
- *
- * The parsed data holds Date objects (deadline, created, completed), and
- * google.script.run refuses any reply containing a Date — "Requests fail if you
- * attempt to pass a Date ... including prohibited types inside objects or
- * arrays". So every paste with a deadline in it made Check rows fail, which is
- * why it appeared to do nothing. The page only ever shows the verdicts; the
- * data is re-parsed on the server at import time.
+ * Parse and check a pasted block WITHOUT touching the sheet.
+ * Returns a per-row verdict so the dialog renders a preview and refuses to
+ * commit while any hard error is outstanding.
  */
 function validateBulkRows(rawText) {
-  var check = checkBulkRows_(rawText);
-  check.rows = check.rows.map(function (r) {
-    return { lineNo: r.lineNo, errors: r.errors, warnings: r.warnings, preview: r.preview };
-  });
-  return check;
-}
-
-/**
- * Parse and check a pasted block WITHOUT touching the sheet. Server-side only:
- * the rows it returns carry Dates and must never be sent to the page.
- */
-function checkBulkRows_(rawText) {
   var text = String(rawText || '')
     .replace(/^```[a-z]*\r?\n/i, '')
     .replace(/\r?\n```\s*$/, '');
@@ -1221,55 +624,6 @@ function parseBulkLine_(line, lineNo) {
   var deadlineTime = parseTimeCell_(cell(10));
   if (!blankish(cell(10)) && !deadlineTime) warnings.push('Deadline time not understood — left blank.');
 
-  // ---- Logging work that is already finished --------------------------------
-  // Columns 2, 9, 12, 13 and 14. Leave them all blank and a row behaves exactly
-  // as before: created now, New, no time, no completion. Fill them to record
-  // past work with its real dates, instead of it landing as open and overdue.
-  // These feed the KPIs, so anything doubtful is an error, not a guess.
-  var now = new Date();
-
-  var createdAt = null;
-  if (!blankish(cell(1))) {
-    createdAt = parseDateTimeCell_(cell(1));
-    if (!createdAt) errors.push('Date not understood: "' + cell(1) + '". Use yyyy-mm-dd or yyyy-mm-dd HH:MM.');
-    else if (createdAt > now) errors.push('Date ' + cell(1) + ' is in the future.');
-  }
-
-  var status = 'New';
-  if (!blankish(cell(13))) {
-    status = pick(cell(13), ALLOWED.status, 'status', false);
-    if (status === 'In Progress') {
-      // An imported row has no session clock, so "In Progress" would show a
-      // timer that is not running and bank nothing when it stops.
-      errors.push('Import cannot start a timer. Use New or Paused, then press Start on the dashboard.');
-    }
-  }
-
-  var hours = null;
-  if (!blankish(cell(8))) {
-    if (!/^\d+(\.\d+)?$/.test(cell(8))) {
-      errors.push('Time spent must be plain hours such as 2.5 — got "' + cell(8) + '".');
-    } else {
-      hours = Math.round(parseFloat(cell(8)) * 100) / 100;
-      if (hours > 100) warnings.push(hours + 'h on one task is unusually high — check it is hours, not minutes.');
-    }
-  }
-
-  var completedAt = null;
-  var doneDate = cell(11), doneTime = cell(12);
-  if (status === 'Done') {
-    if (blankish(doneDate)) {
-      errors.push('Done needs a Completed Date — it is the date the KPIs count.');
-    } else {
-      completedAt = parseDateTimeCell_(doneDate + (blankish(doneTime) ? '' : ' ' + doneTime));
-      if (!completedAt) errors.push('Completed date/time not understood: "' + doneDate + ' ' + doneTime + '".');
-      else if (completedAt > now) errors.push('Completed ' + doneDate + ' is in the future.');
-      else if (createdAt && completedAt < createdAt) errors.push('Completed before it was created.');
-    }
-  } else if (!blankish(doneDate) || !blankish(doneTime)) {
-    errors.push('A completed date is filled in but the status is ' + status + '. Set Done, or clear it.');
-  }
-
   // Internal planning codes must never reach the management-facing columns.
   var banned = /\b(AC-\d+|V\d{2,}|D-C\d+|TD-\d+|B\d{3}|Q\d+|M\d{2}-C\d{2})\b/;
   if (banned.test(summary))  warnings.push('Summary contains an internal code — translate it to plain English.');
@@ -1287,41 +641,13 @@ function parseBulkLine_(line, lineNo) {
     priorityStatus:   pick(cell(15), ALLOWED.priority,  'priority',          true),
     remarks:          cell(16),
     developerRemarks: cell(17),
-    reporter:         cell(19),
-    createdAt:        createdAt,
-    status:           status,
-    hours:            hours,
-    completedAt:      completedAt
+    reporter:         cell(19)
   };
 
-  var when = createdAt
-    ? Utilities.formatDate(createdAt, Session.getScriptTimeZone(), 'd MMM')
-    : 'today';
   return {
     lineNo: lineNo, errors: errors, warnings: warnings, data: data,
-    preview: summary + '  ·  ' + client + '  →  ' + assigned + '  ·  ' + status + ', ' + when +
-             (hours != null ? ', ' + hours + 'h' : '')
+    preview: summary + '  ·  ' + client + '  →  ' + assigned
   };
-}
-
-/**
- * "yyyy-mm-dd", "mm/dd/yyyy", either followed by a time ("14:30", "2:30 PM").
- * A time that does not parse fails the whole cell — silently dropping it would
- * move a completion to midnight.
- */
-function parseDateTimeCell_(s) {
-  var m = String(s || '').trim().match(/^(\S+)(?:\s+(.+))?$/);
-  if (!m) return null;
-  if (!/^\d{4}-\d{1,2}-\d{1,2}$|^\d{1,2}\/\d{1,2}\/\d{4}$/.test(m[1])) return null;
-  var d = parseDateCell_(m[1]);
-  if (!d) return null;
-  if (m[2]) {
-    var t = parseTimeCell_(m[2]);
-    if (!t) return null;
-    var hm = t.split(':');
-    d.setHours(+hm[0], +hm[1], 0, 0);
-  }
-  return d;
 }
 
 function parseDateCell_(s) {
@@ -1356,7 +682,7 @@ function parseTimeCell_(s) {
  * write, not fifty, and cannot interleave with a concurrent form submission.
  */
 function commitBulkRows(rawText) {
-  var check = checkBulkRows_(rawText);
+  var check = validateBulkRows(rawText);
   if (check.error) return { success: false, error: check.error };
   if (check.errorCount > 0) {
     return { success: false, error: check.errorCount + ' row(s) still have errors. Fix and re-validate.' };
@@ -1381,7 +707,7 @@ function commitBulkRows(rawText) {
     var rows = [], ids = [], byDev = {};
     check.rows.forEach(function (r) {
       var taskId = formatTaskId_(nextNumber++);
-      var row = buildRow_(taskId, r.data.createdAt || now, submitter, r.data.assignedMember, r.data);
+      var row = buildRow_(taskId, now, submitter, r.data.assignedMember, r.data);
       rows.push(row);
       ids.push(taskId);
       var dev = r.data.assignedMember;
@@ -1389,11 +715,7 @@ function commitBulkRows(rawText) {
       byDev[dev].push(row);
     });
 
-    // Hours go in as plain numbers. A column still on duration format would
-    // redraw 2.5 as 60:00 and hand the value back as a Date — the same trap
-    // writeHours_ guards on the live path.
     var startRow = getRealLastRow(masterSheet) + 1;
-    formatImportBlock_(masterSheet, startRow, rows.length);
     masterSheet.getRange(startRow, 1, rows.length, LAST_MASTER_COL).setValues(rows);
     SpreadsheetApp.flush();
 
@@ -1407,9 +729,7 @@ function commitBulkRows(rawText) {
       var sheet = ss.getSheetByName(dev);
       if (!sheet) { devErrors.push('No tab named "' + dev + '"'); return; }
       var block = byDev[dev];
-      var at = getRealLastRow(sheet) + 1;
-      formatImportBlock_(sheet, at, block.length);
-      sheet.getRange(at, 1, block.length, LAST_MASTER_COL).setValues(block);
+      sheet.getRange(getRealLastRow(sheet) + 1, 1, block.length, LAST_MASTER_COL).setValues(block);
     });
     SpreadsheetApp.flush();
 
@@ -1492,210 +812,30 @@ function removeSheetProtection() {
 }
 
 /** Dropdowns on the editable columns so hand-edits stay inside the allowed values. */
-/**
- * Only these columns carry a dropdown. Every other task column is cleared.
- *
- * A strict rule (setAllowInvalid false) makes Apps Script THROW on setValues —
- * it does not quietly write through. So a stale rule anywhere in columns 1..23
- * blocks the whole row, and the user gets a raw Sheets error naming a cell.
- * That is what a leftover rule on column G (the submitter's EMAIL, listing
- * developer names) was doing.
- */
-var VALIDATED_COLUMNS = { 8: 'assigned', 14: 'status', 22: 'svn' };
-
 function applyDropdowns_(ss) {
   var statusRule = SpreadsheetApp.newDataValidation()
     .requireValueInList(ALLOWED.status, true).setAllowInvalid(false)
     .setHelpText('Pick a status from the list.').build();
   var svnRule = SpreadsheetApp.newDataValidation()
     .requireValueInList(ALLOWED.svn, true).setAllowInvalid(false).build();
-  // Built from the live team list, so adding someone to DEVELOPER_SHEET_NAMES
-  // and running this is all that is needed to let work be assigned to them.
   var assignedRule = SpreadsheetApp.newDataValidation()
-    .requireValueInList(DEVELOPER_SHEET_NAMES, true).setAllowInvalid(false)
-    .setHelpText('Pick a current team member.').build();
-
-  var cleared = 0, blocked = [];
+    .requireValueInList(DEVELOPER_SHEET_NAMES, true).setAllowInvalid(false).build();
 
   allTaskSheetNames_().concat([MASTER_SHEET_NAME]).forEach(function (name) {
     var sheet = ss.getSheetByName(name);
     if (!sheet) return;
     var rows = Math.max(sheet.getMaxRows() - 1, 1);
-
-    // A Google Sheets Table makes its columns "typed" and rejects any validation
-    // change, so each column is attempted on its own and a refusal is reported
-    // rather than aborting the whole refresh.
-    function attempt(col, fn) {
-      try { fn(sheet.getRange(2, col, rows, 1)); return true; }
-      catch (e) {
-        if (/typed column|not allowed on cells/i.test(String(e.message))) {
-          if (blocked.indexOf(name) === -1) blocked.push(name);
-        } else { throw e; }
-        return false;
-      }
-    }
-
-    // Wipe every task column first, so no rule from an earlier setup survives.
-    for (var c = 1; c <= SESSION_START_COL; c++) {
-      if (VALIDATED_COLUMNS[c]) continue;
-      var range = sheet.getRange(2, c, rows, 1);
-      var has = false;
-      try { has = !!range.getDataValidation() || range.getDataValidations().some(function (r) { return r[0]; }); }
-      catch (e) { has = false; }
-      if (has && attempt(c, function (r) { r.clearDataValidations(); })) cleared++;
-    }
-
-    attempt(SYNC_COLUMNS['Status'],        function (r) { r.setDataValidation(statusRule); });
-    attempt(SYNC_COLUMNS['SVN Committed'], function (r) { r.setDataValidation(svnRule); });
-
-    // Assignment is chosen on Master only; team tabs mirror whatever Master says.
+    sheet.getRange(2, SYNC_COLUMNS['Status'], rows, 1).setDataValidation(statusRule);
+    sheet.getRange(2, SYNC_COLUMNS['SVN Committed'], rows, 1).setDataValidation(svnRule);
     if (name === MASTER_SHEET_NAME) {
-      attempt(MASTER_COL_ASSIGNED, function (r) { r.setDataValidation(assignedRule); });
-    } else {
-      attempt(MASTER_COL_ASSIGNED, function (r) { r.clearDataValidations(); });
+      sheet.getRange(2, MASTER_COL_ASSIGNED, rows, 1).setDataValidation(assignedRule);
     }
   });
-
-  return { cleared: cleared, blocked: blocked };
-}
-
-/**
- * Lists every task column that carries a rule and what it allows.
- * Run this when a submission is rejected naming a cell — it shows which column
- * is objecting and whether the allowed values still match the team.
- */
-/**
- * Works out where the data ACTUALLY sits, by what each column contains rather
- * than what its header claims.
- *
- * Repair Header Row only checked column A for TASK- ids, so a sheet whose data
- * was shifted from the middle onwards passed the guard and then had canonical
- * headings written over misplaced data — making the mismatch invisible instead
- * of fixing it. This is the tool that finds that.
- */
-function diagnoseRowShift() {
-  var ui = SpreadsheetApp.getUi();
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-
-  // Fingerprints for the columns whose content is unmistakable.
-  var expect = {
-    1:  { name: 'Task ID',        test: function (v) { return /^TASK-\d+$/.test(String(v).trim()); } },
-    7:  { name: 'Submitter email',test: function (v) { return /@/.test(String(v)); } },
-    8:  { name: 'Assigned Member',test: function (v) { return allTaskSheetNames_().indexOf(String(v).trim()) !== -1; } },
-    14: { name: 'Status',         test: function (v) { return ALLOWED.status.indexOf(String(v).trim()) !== -1; } },
-    15: { name: 'Planned/Unplan', test: function (v) { return ALLOWED.planned.indexOf(String(v).trim()) !== -1; } },
-    16: { name: 'Priority',       test: function (v) { return ALLOWED.priority.indexOf(String(v).trim()) !== -1; } },
-    22: { name: 'SVN Committed',  test: function (v) { return ALLOWED.svn.indexOf(String(v).trim()) !== -1; } }
-  };
-
-  var report = [], verdicts = [];
-
-  [MASTER_SHEET_NAME].concat(allTaskSheetNames_()).forEach(function (name) {
-    var sheet = ss.getSheetByName(name);
-    if (!sheet) return;
-    var last = getRealLastRow(sheet);
-    if (last < 2) return;
-
-    var n = Math.min(30, last - 1);
-    var data = sheet.getRange(2, 1, n, SESSION_START_COL).getValues();
-    var lines = [], shifts = {};
-
-    Object.keys(expect).forEach(function (colStr) {
-      var col = parseInt(colStr, 10), spec = expect[col];
-
-      // Where does this kind of value actually live? Scan nearby columns.
-      var best = null, bestHits = 0;
-      for (var c = Math.max(1, col - 3); c <= Math.min(SESSION_START_COL, col + 3); c++) {
-        var hits = 0;
-        for (var r = 0; r < n; r++) if (spec.test(data[r][c - 1])) hits++;
-        if (hits > bestHits) { bestHits = hits; best = c; }
-      }
-      if (!bestHits) return;                       // column genuinely empty — no opinion
-
-      if (best !== col) {
-        var delta = best - col;
-        shifts[delta] = (shifts[delta] || 0) + 1;
-        lines.push('   ' + spec.name + ': expected ' + colLetter_(col) +
-                   ', found in ' + colLetter_(best) + '  (' + bestHits + '/' + n + ' rows)');
-      }
-    });
-
-    if (lines.length) {
-      var worst = Object.keys(shifts).sort(function (a, b) { return shifts[b] - shifts[a]; })[0];
-      verdicts.push(name + ' — data sits ' + Math.abs(worst) + ' column(s) ' +
-                    (worst > 0 ? 'RIGHT' : 'LEFT') + ' of its headings');
-      report.push(name + ':\n' + lines.join('\n'));
-    }
-  });
-
-  if (!report.length) {
-    ui.alert('Column check',
-      'Every sheet holds the kind of data its headings promise. No shift found.',
-      ui.ButtonSet.OK);
-    return;
-  }
-
-  ui.alert('Columns do not match their headings',
-    verdicts.join('\n') + '\n\n' + report.join('\n\n') +
-    '\n\nDo NOT run Repair Header Row on these — it only rewrites headings and ' +
-    'would hide the problem again.\n\n' +
-    'The data has to be moved to match the headings, or the headings moved to ' +
-    'match the data. Send me this report and I will tell you which.',
-    ui.ButtonSet.OK);
-}
-
-function diagnoseValidation() {
-  var ui = SpreadsheetApp.getUi();
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var headers = MASTER_HEADERS;
-  var out = [], problems = [];
-
-  [MASTER_SHEET_NAME].concat(allTaskSheetNames_()).forEach(function (name) {
-    var sheet = ss.getSheetByName(name);
-    if (!sheet) return;
-    var probe = Math.min(getRealLastRow(sheet) + 1, sheet.getMaxRows());
-    if (probe < 2) probe = 2;
-
-    var lines = [];
-    for (var c = 1; c <= SESSION_START_COL; c++) {
-      var rule = sheet.getRange(probe, c).getDataValidation();
-      if (!rule) continue;
-      var vals = [];
-      try { vals = rule.getCriteriaValues()[0] || []; } catch (e) {}
-      var label = colLetter_(c) + ' ' + (headers[c - 1] || '?');
-      lines.push('   ' + label + ' → ' + (vals.length ? vals.join(', ') : '(non-list rule)'));
-
-      if (!VALIDATED_COLUMNS[c]) problems.push(name + ' ' + label + ' should have no rule');
-      if (c === MASTER_COL_ASSIGNED && vals.length) {
-        DEVELOPER_SHEET_NAMES.forEach(function (d) {
-          if (vals.indexOf(d) === -1) problems.push(name + ' ' + label + ' is missing "' + d + '"');
-        });
-      }
-    }
-    if (lines.length) out.push(name + ':\n' + lines.join('\n'));
-  });
-
-  ui.alert('Data validation',
-    (problems.length ? 'PROBLEMS:\n  ' + problems.join('\n  ') +
-       '\n\nRun Admin > Refresh Dropdowns to fix all of these.\n\n' : 'No problems found.\n\n') +
-    (out.join('\n\n') || 'No validation rules anywhere.'),
-    ui.ButtonSet.OK);
 }
 
 function applyDropdownsMenu() {
-  var res = applyDropdowns_(SpreadsheetApp.getActiveSpreadsheet());
-  SpreadsheetApp.getUi().alert(
-    'Dropdowns refreshed.\n\n' +
-    'Assignable: ' + DEVELOPER_SHEET_NAMES.join(', ') + '\n' +
-    'Status: ' + ALLOWED.status.join(', ') + '\n\n' +
-    (res.cleared ? 'Cleared ' + res.cleared + ' stale rule(s) from columns that should not have one.'
-                 : 'No stale rules found.') +
-    (res.blocked.length
-      ? '\n\nBLOCKED — these tabs are Google Sheets Tables, which refuse validation changes:\n  ' +
-        res.blocked.join(', ') +
-        '\n\nFix: click any cell in the table, open the table menu at its top-left ' +
-        'corner (or right-click > Table), choose "Convert to range", then run this again.'
-      : ''));
+  applyDropdowns_(SpreadsheetApp.getActiveSpreadsheet());
+  SpreadsheetApp.getUi().alert('Dropdowns refreshed on all task sheets.');
 }
 
 // ---------------------------------------------------------------------------
@@ -1931,51 +1071,10 @@ function verifySheetAlignment() {
  * Applies a status change to Master and the team tab together: starts the
  * clock, banks the elapsed session on pause/done, stamps completion.
  *
- * The running total is normalised through readStoredHours_ first. Duration cells
+ * The running total is normalised through toDayFraction_ first. Duration cells
  * return a Date, and parseFloat(Date) is NaN — reading it raw would silently
  * reset the task's accumulated hours on every pause.
  */
-/**
- * Writes decimal hours into the time column and forces the plain-number format.
- *
- * A cell left on Sheets' duration format redraws 2.5 as 60:00:00 and, worse,
- * hands getValue() back a Date. readStoredHours_ then reads that Date as days
- * and multiplies by 24, so a session banked into a duration-formatted cell
- * comes back twenty-four times too big and compounds on the next one. Setting
- * the format on every write makes the round trip lossless whatever the cell
- * carried before, including rows migrateTimeToHours has never touched.
- */
-/**
- * Writes a completion moment into Completed Date (12) and Completed Time (13).
- *
- * Both cells hold the same full date-and-time; the formats decide what each
- * shows. Without them a new row takes whatever format the cell had, and
- * Completed Time displayed "9/11/2026" with the time hidden — which reads as
- * the date having been copied into the wrong column.
- */
-var COMPLETED_DATE_FORMAT = 'M/d/yyyy';
-var COMPLETED_TIME_FORMAT = 'H:mm';
-
-/** Formats for an imported block, set before the values land: hours as a
- *  plain number, and the two completion columns as a date and a time. */
-function formatImportBlock_(sheet, startRow, count) {
-  sheet.getRange(startRow, TOTAL_TIME_COL, count, 1).setNumberFormat('0.00');
-  sheet.getRange(startRow, SYNC_COLUMNS['Completed Date'], count, 1).setNumberFormat(COMPLETED_DATE_FORMAT);
-  sheet.getRange(startRow, SYNC_COLUMNS['Completed Time'], count, 1).setNumberFormat(COMPLETED_TIME_FORMAT);
-}
-
-function stampCompletion_(sheet, row, when) {
-  sheet.getRange(row, SYNC_COLUMNS['Completed Date']).setNumberFormat(COMPLETED_DATE_FORMAT).setValue(when);
-  sheet.getRange(row, SYNC_COLUMNS['Completed Time']).setNumberFormat(COMPLETED_TIME_FORMAT).setValue(when);
-}
-
-function writeHours_(sheet, row, hours) {
-  if (!sheet || !row) return;
-  var cell = sheet.getRange(row, TOTAL_TIME_COL);
-  cell.setNumberFormat('0.00');
-  cell.setValue(Math.round(hours * 100) / 100);
-}
-
 function applyStatusChange_(masterSheet, masterRow, devSheet, devRow, newStatus, oldStatus) {
   var now = new Date();
   var hourMs = 60 * 60 * 1000;
@@ -2021,9 +1120,8 @@ function applyStatusChange_(masterSheet, masterRow, devSheet, devRow, newStatus,
                'h. The timer was probably left running.';
       }
 
-      var previous = readStoredHours_(masterSheet.getRange(masterRow, TOTAL_TIME_COL).getValue());
-      writeHours_(masterSheet, masterRow, previous + hrs);
-      if (devSheet && devRow) writeHours_(devSheet, devRow, previous + hrs);
+      var previous = toDayFraction_(masterSheet.getRange(masterRow, TOTAL_TIME_COL).getValue());
+      writeBoth(TOTAL_TIME_COL, previous + (hrs / 24));
       clearBoth(SESSION_START_COL);
 
       if (note) {
@@ -2049,8 +1147,8 @@ function applyStatusChange_(masterSheet, masterRow, devSheet, devRow, newStatus,
   //     to clear it, or the row counts as both finished and in flight.
   if (newStatus === 'Done') {
     if (!masterSheet.getRange(masterRow, SYNC_COLUMNS['Completed Date']).getValue()) {
-      stampCompletion_(masterSheet, masterRow, now);
-      if (devSheet && devRow) stampCompletion_(devSheet, devRow, now);
+      writeBoth(SYNC_COLUMNS['Completed Date'], now);
+      writeBoth(SYNC_COLUMNS['Completed Time'], now);
     }
   } else if (oldStatus === 'Done') {
     clearBoth(SYNC_COLUMNS['Completed Date']);
@@ -2062,196 +1160,60 @@ function applyStatusChange_(masterSheet, masterRow, devSheet, devRow, newStatus,
 // TRIGGERS
 // ---------------------------------------------------------------------------
 
-/**
- * Keeps each team tab and Master in step, and runs the timer on Status edits.
- *
- * A Status edit is more than a copy: moving into or out of In Progress starts
- * or banks a session. Three kinds of edit used to skip that completely, leaving
- * the tab and Master disagreeing and the session never banked:
- *   - dragging or pasting a status down several rows — only one cell was handled
- *   - pasting into a single cell — e.value is undefined for a paste
- *   - changing Status on Master itself — Master edits were ignored
- * Pasting a Developer Remark into one cell also blanked it on Master, for the
- * same e.value reason.
- *
- * So values are read from the cells, never from the event, and the previous
- * status comes from the other half of the pair: for a tab edit that is Master,
- * the record; for a Master edit it is the tab, which has not been updated yet.
- *
- * Reassignment stays in onEdit rather than an installable trigger so it works
- * the moment this file is saved — an installable trigger has to be created by
- * hand and is lost on a re-deploy.
- */
+/** Team tab edits mirror up to Master. */
 function onEdit(e) {
   if (!e || !e.range) return;
-  var range = e.range;
-  var sheet = range.getSheet();
+  var sheet = e.range.getSheet();
   var sheetName = sheet.getName();
-  var ss = e.source || SpreadsheetApp.getActiveSpreadsheet();
 
-  var top = range.getRow(), col = range.getColumn();
-  var bottom = top + range.getNumRows() - 1;
-  if (bottom < 2) return;                          // the header row only
-  var first = Math.max(top, 2);
+  if (sheetName === MASTER_SHEET_NAME) return;
+  if (DEVELOPER_SHEET_NAMES.indexOf(sheetName) === -1) return;
 
-  var onMaster  = sheetName === MASTER_SHEET_NAME;
-  var onTeamTab = DEVELOPER_SHEET_NAMES.indexOf(sheetName) !== -1;
-  if (!onMaster && !onTeamTab) return;
+  var editedRow = e.range.getRow();
+  var editedCol = e.range.getColumn();
+  if (editedRow <= 1) return;
+  // e.oldValue is undefined for multi-cell edits, which would corrupt the timer maths.
+  if (e.range.getNumRows() > 1 || e.range.getNumColumns() > 1) return;
 
-  if (range.getNumColumns() > 1) {
-    // A block spanning columns cannot be matched to Master column by column
-    // safely. Say so rather than leave the two quietly different.
-    ss.toast('Edits across several columns are not copied between Master and the team ' +
-             'tabs, and do not run the timer. Change one column at a time.', 'Not synced', 10);
-    return;
-  }
+  var masterSheet = e.source.getSheetByName(MASTER_SHEET_NAME);
+  var headers = masterSheet.getRange(1, 1, 1, SESSION_START_COL).getValues()[0];
+  var editedHeader = headers[editedCol - 1];
 
-  var masterSheet = onMaster ? sheet : ss.getSheetByName(MASTER_SHEET_NAME);
+  var taskId = sheet.getRange(editedRow, MASTER_COL_TASK_ID).getValue();
+  if (!taskId) return;
+  var masterRow = findRowInSheet_(masterSheet, taskId);
+  if (!masterRow) return;
 
-  if (onMaster) {
-    if (col === ASSIGNED_MEMBER_COL) {
-      // Moving a task needs e.oldValue to know whose tab to clear, and only a
-      // single-cell edit has one.
-      if (top === bottom) moveRowOnAssignment(e);
-      else ss.toast('Reassign one task at a time so each moves to the right tab.', 'Not moved', 10);
+  if (editedHeader === 'Status') {
+    // Banking a session is read-modify-write on the running total. Without a
+    // lock, two status changes landing together can lose one of the sessions.
+    var lock = LockService.getScriptLock();
+    try {
+      lock.waitLock(20000);
+    } catch (busy) {
+      Logger.log('onEdit could not lock for ' + taskId + '; status written, time not banked.');
+      masterSheet.getRange(masterRow, SYNC_COLUMNS['Status']).setValue(e.value);
       return;
     }
-    if (col === SYNC_COLUMNS['Status']) statusEdits_(ss, masterSheet, sheet, col, first, bottom, e);
+    try {
+      applyStatusChange_(masterSheet, masterRow, sheet, editedRow, e.value, e.oldValue);
+    } finally {
+      lock.releaseLock();
+    }
     return;
   }
 
-  var header = String(masterSheet.getRange(1, col).getValue()).trim();
-  if (header === 'Status') {
-    statusEdits_(ss, masterSheet, sheet, col, first, bottom, e);
-    return;
-  }
-
-  var target = SYNC_COLUMNS[header];
-  if (!target) return;
-  var count  = bottom - first + 1;
-  var values = sheet.getRange(first, col, count, 1).getValues();
-  var ids    = sheet.getRange(first, MASTER_COL_TASK_ID, count, 1).getValues();
-  for (var i = 0; i < count; i++) {
-    var taskId = String(ids[i][0]).trim();
-    if (!taskId) continue;
-    var masterRow = findRowInSheet_(masterSheet, taskId);
-    if (masterRow) masterSheet.getRange(masterRow, target).setValue(values[i][0]);
-  }
+  var col = SYNC_COLUMNS[editedHeader];
+  if (col) masterSheet.getRange(masterRow, col).setValue(e.value == null ? '' : e.value);
 }
 
-/**
- * Applies the Status edits in rows first..last of `sheet`, which is either a
- * team tab or Master. Everything happens under the script lock; if the lock
- * cannot be had, the edited cells are put back and the person is told, so no
- * status ever changes without the timer seeing it.
- */
-function statusEdits_(ss, masterSheet, sheet, col, first, last, e) {
-  var onMaster = sheet.getName() === MASTER_SHEET_NAME;
-  var count = last - first + 1;
-  var typed = sheet.getRange(first, col, count, 1).getValues();
-  var ids   = sheet.getRange(first, MASTER_COL_TASK_ID, count, 1).getValues();
-
-  // Resolve every row's pair before taking the lock.
-  var rows = [];
-  for (var i = 0; i < count; i++) {
-    var taskId = String(ids[i][0]).trim();
-    if (!taskId) continue;
-    var masterRow = onMaster ? first + i : findRowInSheet_(masterSheet, taskId);
-    if (!masterRow) continue;
-    var assigned = String(masterSheet.getRange(masterRow, MASTER_COL_ASSIGNED).getValue()).trim();
-    var devSheet = onMaster
-      ? (DEVELOPER_SHEET_NAMES.indexOf(assigned) !== -1 ? ss.getSheetByName(assigned) : null)
-      : sheet;
-    var devRow = onMaster ? (devSheet ? findRowInSheet_(devSheet, taskId) : null) : first + i;
-    rows.push({ at: first + i, taskId: taskId, masterRow: masterRow, devSheet: devSheet,
-                devRow: devRow, typed: String(typed[i][0] == null ? '' : typed[i][0]).trim() });
-  }
-  if (!rows.length) return;
-
-  function previousStatus(r) {
-    if (!onMaster) return String(masterSheet.getRange(r.masterRow, SYNC_COLUMNS['Status']).getValue()).trim();
-    // On Master the cell already holds the new value. A single-cell edit keeps
-    // the old one on the event; otherwise the tab still has it.
-    if (count === 1 && e && e.oldValue != null) return String(e.oldValue).trim();
-    if (r.devSheet && r.devRow) return String(r.devSheet.getRange(r.devRow, SYNC_COLUMNS['Status']).getValue()).trim();
-    return inferStatus_(masterSheet, r.masterRow);
-  }
-
-  var lock = LockService.getScriptLock();
-  try {
-    lock.waitLock(20000);
-  } catch (busy) {
-    rows.forEach(function (r) { sheet.getRange(r.at, col).setValue(previousStatus(r)); });
-    ss.toast('The tracker was busy saving other time, so this status change was undone. ' +
-             'Please make it again.', 'Not saved', 10);
-    return;
-  }
-
-  var refused = [];
-  try {
-    rows.forEach(function (r) {
-      var before = previousStatus(r);
-      var status = canonicalStatus_(r.typed);
-      if (!status) {
-        // Cleared, or not a real status: put the recorded one back rather than
-        // let the tab and Master disagree.
-        sheet.getRange(r.at, col).setValue(before);
-        if (r.typed) refused.push(r.taskId + ' "' + r.typed + '"');
-        return;
-      }
-      if (status !== r.typed) sheet.getRange(r.at, col).setValue(status);   // "done" -> "Done"
-      applyStatusChange_(masterSheet, r.masterRow, r.devSheet, r.devRow, status, before);
-    });
-    SpreadsheetApp.flush();
-  } finally {
-    lock.releaseLock();
-  }
-
-  if (refused.length) {
-    ss.toast('Not a status, so put back: ' + refused.slice(0, 5).join(', ') +
-             (refused.length > 5 ? ' and ' + (refused.length - 5) + ' more' : ''), 'Status unchanged', 10);
-  }
-}
-
-/** The allowed status matching `s` regardless of case, or '' if there is none. */
-function canonicalStatus_(s) {
-  var want = String(s || '').trim().toLowerCase();
-  if (!want) return '';
-  for (var i = 0; i < ALLOWED.status.length; i++) {
-    if (ALLOWED.status[i].toLowerCase() === want) return ALLOWED.status[i];
-  }
-  return '';
-}
-
-/**
- * Last resort when nothing recorded the previous status: a running session
- * means In Progress, a completion date means Done. Used only for a Master edit
- * across several rows on a task with no team tab row.
- */
-function inferStatus_(masterSheet, masterRow) {
-  if (masterSheet.getRange(masterRow, SESSION_START_COL).getValue() instanceof Date) return 'In Progress';
-  if (masterSheet.getRange(masterRow, SYNC_COLUMNS['Completed Date']).getValue()) return 'Done';
-  return '';
-}
-
-/**
- * Moves a task onto the newly assigned person's tab. Called by onEdit when
- * Assigned Member changes on Master.
- *
- * The old holder is looked up in EVERY task tab, archived ones included, so
- * reassigning a departed member's work actually clears it off their sheet. The
- * new holder must be a current member — nothing is ever copied to an archive.
- */
+/** Installable trigger on Master. Moves a task between team tabs on reassignment. */
 function moveRowOnAssignment(e) {
   if (!e || !e.range) return;
   var sheet = e.range.getSheet();
   if (sheet.getName() !== MASTER_SHEET_NAME) return;
   if (e.range.getColumn() !== ASSIGNED_MEMBER_COL) return;
   if (e.range.getRow() <= 1) return;
-
-  var from = String(e.oldValue == null ? '' : e.oldValue).trim();
-  var to   = String(e.value    == null ? '' : e.value).trim();
-  if (from === to) return;
 
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var masterSheet = ss.getSheetByName(MASTER_SHEET_NAME);
@@ -2261,33 +1223,12 @@ function moveRowOnAssignment(e) {
 
   var rowData = masterSheet.getRange(row, 1, 1, LAST_MASTER_COL).getValues()[0];
 
-  // Delete-then-copy across two tabs is not atomic. Without the lock a task
-  // submitted at the same moment can land in the sheet mid-move and be dropped
-  // by the delete, or the copy can duplicate a row the form just wrote.
-  var lock = LockService.getScriptLock();
-  try {
-    lock.waitLock(20000);
-  } catch (busy) {
-    Logger.log('moveRowOnAssignment could not lock for ' + taskId + '; the row was not moved.');
-    return;
+  if (e.oldValue && DEVELOPER_SHEET_NAMES.indexOf(e.oldValue) !== -1) {
+    deleteTaskFromDevSheet(e.oldValue, taskId);
   }
-  try {
-    // Archived tabs are included on the way OUT so a departed member's sheet is
-    // actually cleared, but never on the way IN.
-    if (from && allTaskSheetNames_().indexOf(from) !== -1) {
-      deleteTaskFromDevSheet(from, taskId);
-    }
-    if (to && DEVELOPER_SHEET_NAMES.indexOf(to) !== -1) {
-      // A row already there (a half-finished earlier move, or a manual paste)
-      // would leave the task on two tabs and double-count it.
-      deleteTaskFromDevSheet(to, taskId);
-      copyTaskToDevSheet_(ss, rowData, to);
-    }
+  if (e.value && DEVELOPER_SHEET_NAMES.indexOf(e.value) !== -1) {
+    copyTaskToDevSheet_(ss, rowData, e.value);
     SpreadsheetApp.flush();
-    ss.toast(taskId + ': ' + (from || 'unassigned') + ' → ' + (to || 'unassigned'),
-             'Task moved', 5);
-  } finally {
-    lock.releaseLock();
   }
 }
 
@@ -2323,18 +1264,6 @@ function sendAssignmentEmail_(formData, taskId, assignedMember, devEmail, master
 // ---------------------------------------------------------------------------
 // DASHBOARD BACKEND
 // ---------------------------------------------------------------------------
-
-/**
- * A Date only when it is a plausible calendar date, otherwise null.
- *
- * Sheets stores a bare time of day as an offset from 1899-12-30, so a cell
- * holding "17:00" arrives as a Date in 1899 and sails through instanceof.
- * Read as a deadline that put every such task 46,276 days overdue on the
- * board. Same trap as a duration in the time column, opposite direction.
- */
-function realDate_(v) {
-  return (v instanceof Date && v.getFullYear() >= 1990) ? v : null;
-}
 
 function getSidebarTasks(filters) {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
@@ -2374,28 +1303,26 @@ function getSidebarTasks(filters) {
     var status = String(row[13]).trim();
 
     if (status === 'Done' && !includeFinished) {
-      var when = realDate_(row[11]) || realDate_(row[1]);
+      var when = (row[11] instanceof Date) ? row[11]
+               : (row[1] instanceof Date)  ? row[1] : null;
       if (!when || when.getTime() < cutoff) { omittedOld++; continue; }
     }
     if (tasks.length >= DASHBOARD_MAX_TASKS) { omittedOld++; continue; }
 
-    var timeSpentHrs = readStoredHours_(row[8]);
+    var timeSpentHrs = toDayFraction_(row[8]) * 24;
 
     var sessionStart = row[SESSION_START_COL - 1];
     var isLive = (sessionStart instanceof Date) && status === 'In Progress';
-    var idleHours = 0;
     if (isLive) {
       // Capped the same way a banked session is, so a timer left running since
       // last week shows 8h rather than 190h.
       var live = (now.getTime() - sessionStart.getTime()) / hourMs;
       timeSpentHrs += Math.max(0, Math.min(live, MAX_SESSION_HOURS));
-      idleHours = idleHoursFor_(String(row[0]), sessionStart);
     }
 
     var deadlineDt = null, isOverdue = false, hoursRemaining = null, hoursOvertime = null;
-    var deadlineCell = realDate_(row[9]);
-    if (deadlineCell) {
-      deadlineDt = new Date(deadlineCell);
+    if (row[9] instanceof Date) {
+      deadlineDt = new Date(row[9]);
       if (row[10] instanceof Date) deadlineDt.setHours(row[10].getHours(), row[10].getMinutes(), 0);
       else deadlineDt.setHours(23, 59, 59);
       var diff = deadlineDt.getTime() - now.getTime();
@@ -2407,10 +1334,9 @@ function getSidebarTasks(filters) {
 
     tasks.push({
       taskId: String(row[0]),
-      // formatDate throws on an invalid date, which used to kill the whole load.
-      date: realDate_(row[1])
+      date: (row[1] instanceof Date)
               ? Utilities.formatDate(row[1], Session.getScriptTimeZone(), 'MMM d')
-              : '',
+              : '',   // formatDate throws on an invalid date, which used to kill the whole load
       summary: String(row[2]),
       client: String(row[3]),
       module: String(row[4]),
@@ -2422,16 +1348,10 @@ function getSidebarTasks(filters) {
       priority: String(row[15]),
       remarks: String(row[16]),
       devRemarks: String(row[17]),
-      // Columns 20 and 21. Never sent before, so the board had no way to show
-      // the screenshots and links people attach when they raise a task.
-      reporter: String(row[19]),
-      attachments: String(row[20]),
       isOverdue: isOverdue,
       hoursRemaining: hoursRemaining,
       hoursOvertime: hoursOvertime,
-      isLive: isLive,
-      idleHours: idleHours,
-      needsCheckIn: isLive && idleHours >= CHECKIN_IDLE_HOURS
+      isLive: isLive
     });
   }
 
@@ -2565,156 +1485,6 @@ function bulkUpdateStatusFromSidebar(taskIds, newStatus) {
   } finally {
     lock.releaseLock();
   }
-}
-
-// ---------------------------------------------------------------------------
-// CONVERSATION — comments, activity and the check-in nudge
-//
-// The Master sheet has no room for a thread, so comments live in their own tab:
-//   1 Timestamp · 2 Task ID · 3 Author Email · 4 Author Name · 5 Kind · 6 Body
-// Append-only. Nothing here ever edits Master except the minutes a post logs.
-// ---------------------------------------------------------------------------
-
-var COMMENT_HEADERS = ['Timestamp', 'Task ID', 'Author Email', 'Author Name', 'Kind', 'Body'];
-
-function commentsSheet_() {
-  var ss = SpreadsheetApp.getActiveSpreadsheet();
-  var sheet = ss.getSheetByName(COMMENTS_SHEET_NAME);
-  if (!sheet) {
-    sheet = ss.insertSheet(COMMENTS_SHEET_NAME);
-    sheet.getRange(1, 1, 1, COMMENT_HEADERS.length).setValues([COMMENT_HEADERS])
-         .setBackground('#00712D').setFontColor('#FFFFFF').setFontWeight('bold');
-    sheet.setFrozenRows(1);
-    sheet.setColumnWidth(1, 150); sheet.setColumnWidth(2, 95);
-    sheet.setColumnWidth(3, 210); sheet.setColumnWidth(4, 110);
-    sheet.setColumnWidth(5, 80);  sheet.setColumnWidth(6, 620);
-  }
-  return sheet;
-}
-
-/** "Venul Minsara" -> "VM"; an email falls back to its first two letters. */
-function initials_(name, email) {
-  var src = String(name || '').trim() || String(email || '').split('@')[0];
-  var parts = src.split(/[\s._-]+/).filter(String);
-  if (!parts.length) return '?';
-  return (parts.length === 1 ? parts[0].slice(0, 2) : parts[0][0] + parts[1][0]).toUpperCase();
-}
-
-function displayName_(email) {
-  var e = String(email || '').toLowerCase();
-  for (var name in DEV_EMAILS) if (String(DEV_EMAILS[name]).toLowerCase() === e) return name;
-  return String(email || '').split('@')[0] || 'Someone';
-}
-
-function relativeWhen_(d) {
-  var mins = Math.round((Date.now() - d.getTime()) / 60000);
-  if (mins < 1)    return 'just now';
-  if (mins < 60)   return mins + 'm ago';
-  var hrs = Math.floor(mins / 60);
-  if (hrs < 24)    return hrs + 'h ago';
-  var days = Math.floor(hrs / 24);
-  if (days < 7)    return days + 'd ago';
-  return Utilities.formatDate(d, Session.getScriptTimeZone(), 'dd/MM/yyyy');
-}
-
-/** Whole thread for one task, oldest first. */
-function getTaskThread(taskId) {
-  taskId = String(taskId || '').trim();
-  if (!/^TASK-\d+$/.test(taskId)) return { comments: [] };
-
-  var sheet = commentsSheet_();
-  var last = getRealLastRow(sheet);
-  if (last < 2) return { comments: [] };
-
-  var rows = sheet.getRange(2, 1, last - 1, COMMENT_HEADERS.length).getValues();
-  var out = [];
-  for (var i = 0; i < rows.length; i++) {
-    if (String(rows[i][1]).trim() !== taskId) continue;
-    var when = rows[i][0] instanceof Date ? rows[i][0] : null;
-    out.push({
-      when:     when ? relativeWhen_(when) : '',
-      stamp:    when ? when.getTime() : 0,
-      email:    String(rows[i][2]),
-      name:     String(rows[i][3]) || displayName_(rows[i][2]),
-      initials: initials_(rows[i][3], rows[i][2]),
-      kind:     String(rows[i][4] || 'comment'),
-      body:     String(rows[i][5])
-    });
-  }
-  out.sort(function (a, b) { return a.stamp - b.stamp; });
-  return { comments: out };
-}
-
-/**
- * Posts an update. Also credits COMMENT_LOGS_MINUTES against the task, which is
- * what makes the thread worth using — a note is work, and it keeps the task off
- * the follow-up list.
- */
-function addComment(taskId, body, alsoLogMinutes) {
-  taskId = String(taskId || '').trim();
-  body = String(body || '').trim();
-
-  if (!/^TASK-\d+$/.test(taskId)) return { success: false, error: 'Unknown task: ' + taskId };
-  if (!body) return { success: false, error: 'Write something first.' };
-  if (body.length > 4000) return { success: false, error: 'Too long — keep it under 4000 characters.' };
-
-  var lock = LockService.getScriptLock();
-  try { lock.waitLock(15000); } catch (e) { return { success: false, error: 'Server busy. Try again.' }; }
-
-  try {
-    var ss = SpreadsheetApp.getActiveSpreadsheet();
-    var masterSheet = ss.getSheetByName(MASTER_SHEET_NAME);
-    if (!findRowInSheet_(masterSheet, taskId)) return { success: false, error: taskId + ' is not in Master.' };
-
-    var email = currentEmail_();
-    var sheet = commentsSheet_();
-    sheet.getRange(getRealLastRow(sheet) + 1, 1, 1, COMMENT_HEADERS.length)
-         .setValues([[new Date(), taskId, email, displayName_(email), 'comment', body]]);
-
-    var logged = 0;
-    if (alsoLogMinutes !== false) {
-      var row = findRowInSheet_(masterSheet, taskId);
-      var previous = readStoredHours_(masterSheet.getRange(row, TOTAL_TIME_COL).getValue());
-      writeHours_(masterSheet, row, previous + (COMMENT_LOGS_MINUTES / 60));
-
-      var assigned = String(masterSheet.getRange(row, MASTER_COL_ASSIGNED).getValue()).trim();
-      if (DEVELOPER_SHEET_NAMES.indexOf(assigned) !== -1) {
-        var dev = ss.getSheetByName(assigned);
-        var devRow = dev ? findRowInSheet_(dev, taskId) : null;
-        if (devRow) writeHours_(dev, devRow, previous + (COMMENT_LOGS_MINUTES / 60));
-      }
-      logged = COMMENT_LOGS_MINUTES;
-    }
-
-    SpreadsheetApp.flush();
-    return { success: true, loggedMinutes: logged, thread: getTaskThread(taskId).comments };
-  } catch (e) {
-    return { success: false, error: e.message };
-  } finally {
-    lock.releaseLock();
-  }
-}
-
-/**
- * Hours since anything was recorded against a running task — the newest of its
- * last comment or the moment it started. Drives the check-in nudge, which only
- * has meaning because a real idle signal now exists.
- */
-function idleHoursFor_(taskId, sessionStart) {
-  var newest = (sessionStart instanceof Date) ? sessionStart.getTime() : 0;
-  var sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(COMMENTS_SHEET_NAME);
-  if (sheet) {
-    var last = getRealLastRow(sheet);
-    if (last >= 2) {
-      var rows = sheet.getRange(2, 1, last - 1, 2).getValues();
-      for (var i = 0; i < rows.length; i++) {
-        if (String(rows[i][1]).trim() !== taskId) continue;
-        if (rows[i][0] instanceof Date && rows[i][0].getTime() > newest) newest = rows[i][0].getTime();
-      }
-    }
-  }
-  if (!newest) return 0;
-  return (Date.now() - newest) / (60 * 60 * 1000);
 }
 
 // ---------------------------------------------------------------------------
@@ -2901,14 +1671,7 @@ function onOpen() {
   var admin = ui.createMenu('Admin')
     .addItem('Add Team Member Tab', 'addTeamMemberTab')
     .addItem('Check Sheet Alignment', 'verifySheetAlignment')
-    .addItem('Repair Header Row (headings only)', 'repairHeaders')
-    .addItem('Check Attachments Folder', 'checkAttachmentFolder')
-    .addItem('Diagnose Dropdowns', 'diagnoseValidation')
-    .addItem('Check Column Alignment (data)', 'diagnoseRowShift')
-    .addItem('Check Web App Files', 'checkWebFiles')
-    .addItem('Check Time Tracking', 'checkTimeTracking')
-    .addItem('Check Time Column', 'checkTimeColumn')
-    .addItem('Convert Old Duration Time to Hours', 'migrateTimeToHours')
+    .addItem('Repair Header Row', 'repairHeaders')
     .addSeparator()
     .addItem('Lock Sheets (protect automated columns)', 'applySheetProtection')
     .addItem('Unlock Sheets', 'removeSheetProtection')
@@ -2919,8 +1682,7 @@ function onOpen() {
     .addItem('Send Latest Task to Terminal', 'sendLatestTaskToClaude');
 
   ui.createMenu('Tracker Options')
-    .addItem('Open Task Dashboard (wide)', 'showDashboardWide')
-    .addItem('Open Task Dashboard (side panel)', 'showSidebar')
+    .addItem('Open Task Dashboard', 'showSidebar')
     .addItem('Refresh My Submitted Tasks', 'populateSupportTracker')
     .addSeparator()
     .addItem('Bulk Add Tasks', 'showBulkAddDialog')
@@ -2930,23 +1692,8 @@ function onOpen() {
     .addToUi();
 }
 
-/**
- * Sidebar dashboard. Google fixes a sidebar at 300px and ignores setWidth on
- * it, so this is as narrow as it gets — showDashboardWide() is the roomy one.
- */
 function showSidebar() {
   var html = HtmlService.createTemplateFromFile('Sidebar')
-    .evaluate().setTitle('Task Dashboard');
+    .evaluate().setTitle('Task Dashboard').setWidth(420);
   SpreadsheetApp.getUi().showSidebar(html);
-}
-
-/**
- * The same dashboard in a modal, which is the only in-sheet surface whose size
- * is actually ours to set. Sized to the viewport rather than a fixed number so
- * it fills a laptop screen and a monitor alike.
- */
-function showDashboardWide() {
-  var html = HtmlService.createTemplateFromFile('MyTasks')
-    .evaluate().setWidth(1500).setHeight(900);
-  SpreadsheetApp.getUi().showModalDialog(html, 'Task Dashboard');
 }
